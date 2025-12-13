@@ -1,0 +1,215 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Note: SQLite doesn't support enums, using String with defaults
+// UserRole: "DOCTOR" | "ADMIN"
+// DoctorStatus: "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "SUSPENDED"
+// ConsultationStatus: "ACTIVE" | "COMPLETED" | "CANCELLED"
+// SubscriptionStatus: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED"
+
+// Admin model (created via seed script)
+model Admin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // bcrypt hashed
+  fullName  String
+  role      String   @default("ADMIN") // "ADMIN"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Doctor model
+model Doctor {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  password       String   // bcrypt hashed
+  fullName       String
+  phone          String
+  specialization String
+
+  // Medical Registration (State OR National)
+  registrationType  String  // "STATE_MEDICAL_COUNCIL" or "NATIONAL_MEDICAL_COMMISSION"
+  registrationNo    String  // Registration number
+  registrationState String? // Required if registrationType is STATE (e.g., "Maharashtra", "Delhi")
+
+  // Aadhaar verification
+  aadhaarNumber String // 12-digit Aadhaar number
+
+  // KYC Documents (File paths to uploaded files)
+  registrationCertificate String? // Medical registration certificate
+  aadhaarFrontPhoto       String? // Aadhaar card front photo
+  aadhaarBackPhoto        String? // Aadhaar card back photo
+  profilePhoto            String? // Doctor's profile photo
+
+  // Verification status
+  status          String  @default("PENDING_VERIFICATION") // DoctorStatus
+  rejectionReason String? // Reason if rejected by admin
+
+  // UPI Payment Info (for patients to pay directly)
+  upiId       String? // UPI ID for payments
+  qrCodeImage String? // File path to QR code image
+
+  // Trial & Subscription
+  trialStartDate     DateTime @default(now())
+  trialEndsAt        DateTime // 14 days from signup
+  patientsCreated    Int      @default(0) // Max 2 during trial
+  subscriptionStatus String   @default("TRIAL") // SubscriptionStatus
+  subscriptionEndsAt DateTime?
+
+  // Razorpay Subscription
+  razorpaySubscriptionId String? @unique
+  razorpayCustomerId     String? @unique
+
+  patients      Patient[]
+  consultations Consultation[]
+  prescriptions Prescription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Patient model (created by doctor, accessed via unique link)
+model Patient {
+  id       String  @id @default(uuid())
+  doctorId String
+  doctor   Doctor  @relation(fields: [doctorId], references: [id])
+
+  fullName String
+  phone    String?
+  age      Int?
+  gender   String?
+
+  // Unique access token (used in shareable link)
+  accessToken String @unique @default(uuid())
+
+  consultations  Consultation[]
+  vitals         Vitals[]
+  medicalUploads MedicalUpload[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Consultation session (chat + video)
+model Consultation {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+  doctorId  String
+  doctor    Doctor  @relation(fields: [doctorId], references: [id])
+
+  status      String   @default("ACTIVE") // ConsultationStatus
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  // Agora video
+  agoraChannelName  String? @unique
+  agoraDoctorToken  String?
+  agoraPatientToken String?
+
+  // Doctor notes
+  chiefComplaint String?
+  doctorNotes    String?
+
+  chatMessages        ChatMessage[]
+  prescription        Prescription?
+  paymentConfirmation PaymentConfirmation?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Chat messages (async messaging)
+model ChatMessage {
+  id             String       @id @default(uuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+
+  senderType String // "doctor" or "patient"
+  message    String
+
+  // File attachments
+  attachmentPath String? // Local file path
+  attachmentType String? // image/pdf/etc
+
+  createdAt DateTime @default(now())
+
+  @@index([consultationId, createdAt])
+}
+
+// Patient vitals data
+model Vitals {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  weight        Float?  // kg
+  height        Float?  // cm
+  bloodPressure String? // "120/80"
+  temperature   Float?  // °C
+  heartRate     Int?    // bpm
+  oxygenLevel   Int?    // %
+
+  notes String?
+
+  createdAt DateTime @default(now())
+}
+
+// Medical reports/files uploaded by patient
+model MedicalUpload {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  filePath    String  // Local file path
+  fileType    String  // image/pdf
+  fileName    String
+  description String?
+
+  createdAt DateTime @default(now())
+}
+
+// Prescription generated by doctor
+model Prescription {
+  id             String       @id @default(uuid())
+  consultationId String       @unique
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  doctorId       String
+  doctor         Doctor       @relation(fields: [doctorId], references: [id])
+
+  diagnosis    String
+  medications  String  // JSON string: Array of {name, dosage, frequency, duration}
+  instructions String?
+
+  pdfPath String? // Local file path of generated PDF
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Payment confirmation (manual by doctor)
+model PaymentConfirmation {
+  id             String       @id @default(uuid())
+  consultationId String       @unique
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+
+  amount            Float
+  confirmedByDoctor Boolean  @default(false)
+  confirmedAt       DateTime?
+
+  // Optional payment proof from patient
+  proofImagePath String? // Screenshot of payment
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,147 @@
+import express, { Application, Request, Response } from 'express';
+import { Server as SocketIOServer } from 'socket.io';
+import { createServer } from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import dotenv from 'dotenv';
+import prisma from './config/database';
+import authRoutes from './routes/auth.routes';
+import adminRoutes from './routes/admin.routes';
+import patientRoutes from './routes/patient.routes';
+import consultationRoutes from './routes/consultation.routes';
+import vitalsRoutes from './routes/vitals.routes';
+import prescriptionRoutes from './routes/prescription.routes';
+import paymentRoutes from './routes/payment.routes';
+import { initializeChatSocket } from './socket/chat.socket';
+
+// Load environment variables
+dotenv.config();
+
+// Initialize Express app
+const app: Application = express();
+const httpServer = createServer(app);
+
+// CORS configuration - allow multiple origins
+const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+
+// Initialize Socket.io
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+// Middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Serve static files (uploads) with CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+}, express.static('uploads'));
+
+// Health check route
+app.get('/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    message: 'Bhishak Med API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+  });
+});
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/patients', patientRoutes);
+app.use('/api/consultations', consultationRoutes);
+app.use('/api', vitalsRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/payments', paymentRoutes);
+
+// Test database connection
+app.get('/api/test-db', async (req: Request, res: Response) => {
+  try {
+    await prisma.$connect();
+    const adminCount = await prisma.admin.count();
+    const doctorCount = await prisma.doctor.count();
+    const patientCount = await prisma.patient.count();
+
+    res.json({
+      status: 'connected',
+      message: 'Database connection successful',
+      stats: {
+        admins: adminCount,
+        doctors: doctorCount,
+        patients: patientCount,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Database connection failed',
+      error: error.message,
+    });
+  }
+});
+
+// Initialize Socket.io chat handler
+initializeChatSocket(io);
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    status: 'error',
+    message: 'Route not found',
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+
+httpServer.listen(PORT, () => {
+  console.log('🚀 Server started successfully!');
+  console.log(`📡 API running on: http://localhost:${PORT}`);
+  console.log(`🔌 Socket.io ready on: http://localhost:${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`💾 Database: ${process.env.DATABASE_URL ? 'Configured' : 'Not configured'}`);
+  console.log('\n✨ Bhishak Med Backend is ready!\n');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  await prisma.$disconnect();
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+// Force restart
+// restart
