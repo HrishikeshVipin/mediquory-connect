@@ -10,12 +10,26 @@ export const saveVitals = async (req: Request, res: Response): Promise<void> => 
     // Verify patient exists
     const patient = await prisma.patient.findUnique({
       where: { id: patientId },
+      select: {
+        id: true,
+        status: true,
+        fullName: true,
+      },
     });
 
     if (!patient) {
       res.status(404).json({
         success: false,
         message: 'Patient not found',
+      });
+      return;
+    }
+
+    // Block vitals recording for waitlisted patients
+    if (patient.status === 'WAITLISTED') {
+      res.status(403).json({
+        success: false,
+        message: 'Cannot record vitals for waitlisted patients.',
       });
       return;
     }

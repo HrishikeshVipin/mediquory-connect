@@ -6,15 +6,18 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Note: SQLite doesn't support enums, using String with defaults
+// Note: Using String with defaults for compatibility
 // UserRole: "DOCTOR" | "ADMIN"
 // DoctorStatus: "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "SUSPENDED"
 // ConsultationStatus: "ACTIVE" | "COMPLETED" | "CANCELLED"
 // SubscriptionStatus: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED"
+// SubscriptionTier: "TRIAL" | "BASIC" | "PROFESSIONAL" | "ENTERPRISE"
+// MedicineCategory: "AYURVEDA" | "HOMEOPATHY" | "ALLOPATHY" | "UNANI" | "SIDDHA" | "GENERAL"
+// SubscriptionHistoryStatus: "ACTIVE" | "COMPLETED" | "CANCELLED"
 
 // Admin model (created via seed script)
 model Admin {
@@ -23,6 +26,9 @@ model Admin {
   password  String   // bcrypt hashed
   fullName  String
   role      String   @default("ADMIN") // "ADMIN"
+
+  // Notification preferences
+  emailNotifications Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -66,13 +72,39 @@ model Doctor {
   subscriptionStatus String   @default("TRIAL") // SubscriptionStatus
   subscriptionEndsAt DateTime?
 
+  // Subscription Tier & Limits
+  subscriptionTier   String   @default("TRIAL") // SubscriptionTier
+  patientLimit       Int      @default(2) // Based on subscription tier (-1 for unlimited)
+
+  // Video Minutes Tracking
+  monthlyVideoMinutes Int      @default(100) // Base quota from subscription
+  purchasedMinutes    Int      @default(0) // Extra minutes purchased (carry over)
+  totalMinutesUsed    Int      @default(0) // Current cumulative usage
+  lastResetDate       DateTime @default(now()) // For monthly quota reset
+
   // Razorpay Subscription
   razorpaySubscriptionId String? @unique
   razorpayCustomerId     String? @unique
 
-  patients      Patient[]
-  consultations Consultation[]
-  prescriptions Prescription[]
+  // Prescription serial numbering
+  lastPrescriptionSerial Int @default(0)
+
+  // Patient self-registration
+  allowSelfRegistration Boolean @default(true)
+
+  // Current subscription history reference
+  currentSubscriptionHistoryId String? @unique
+
+  // Notification preferences
+  emailNotifications Boolean @default(true)
+  chatNotifications  Boolean @default(true)
+
+  patients            Patient[]
+  consultations       Consultation[]
+  prescriptions       Prescription[]
+  minutePurchases     MinutePurchase[]
+  doctorMedicines     DoctorMedicine[]
+  subscriptionHistory DoctorSubscriptionHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -92,6 +124,16 @@ model Patient {
   // Unique access token (used in shareable link)
   accessToken String @unique @default(uuid())
 
+  // Track patient creation method
+  createdVia String @default("MANUAL") // "MANUAL" | "SELF_REGISTERED"
+
+  // Video call permissions (doctor can enable/disable per patient)
+  videoCallEnabled Boolean @default(false) // Doctor must enable video calls for patient
+
+  // Patient status for waitlist system
+  status      String    @default("ACTIVE") // "ACTIVE" | "WAITLISTED"
+  activatedAt DateTime? // When patient was moved from waitlist to active
+
   consultations  Consultation[]
   vitals         Vitals[]
   medicalUploads MedicalUpload[]
@@ -104,13 +146,19 @@ model Patient {
 model Consultation {
   id        String  @id @default(uuid())
   patientId String
-  patient   Patient @relation(fields: [patientId], references: [id])
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctorId  String
   doctor    Doctor  @relation(fields: [doctorId], references: [id])
 
   status      String   @default("ACTIVE") // ConsultationStatus
   startedAt   DateTime @default(now())
   completedAt DateTime?
+
+  // Duration tracking (in seconds)
+  duration        Int?     @default(0) // Total duration of consultation (for reference)
+  videoDuration   Int?     @default(0) // Video call duration only (used for billing)
+  wentOvertime    Boolean  @default(false) // Did consultation exceed available minutes?
+  overtimeMinutes Int?     @default(0) // How many minutes over quota
 
   // Agora video
   agoraChannelName  String? @unique
@@ -121,9 +169,15 @@ model Consultation {
   chiefComplaint String?
   doctorNotes    String?
 
+  // Unread message tracking
+  lastMessageAt     DateTime?
+  lastMessageSender String? // "doctor" | "patient"
+  hasUnreadMessages Boolean  @default(false) // For doctor - updated when patient sends message
+
   chatMessages        ChatMessage[]
   prescription        Prescription?
   paymentConfirmation PaymentConfirmation?
+  review              ConsultationReview?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -133,7 +187,7 @@ model Consultation {
 model ChatMessage {
   id             String       @id @default(uuid())
   consultationId String
-  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 
   senderType String // "doctor" or "patient"
   message    String
@@ -142,16 +196,21 @@ model ChatMessage {
   attachmentPath String? // Local file path
   attachmentType String? // image/pdf/etc
 
+  // Read tracking for unread notifications
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([consultationId, createdAt])
+  @@index([consultationId, isRead])
 }
 
 // Patient vitals data
 model Vitals {
   id        String  @id @default(uuid())
   patientId String
-  patient   Patient @relation(fields: [patientId], references: [id])
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   weight        Float?  // kg
   height        Float?  // cm
@@ -169,7 +228,7 @@ model Vitals {
 model MedicalUpload {
   id        String  @id @default(uuid())
   patientId String
-  patient   Patient @relation(fields: [patientId], references: [id])
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   filePath    String  // Local file path
   fileType    String  // image/pdf
@@ -183,9 +242,11 @@ model MedicalUpload {
 model Prescription {
   id             String       @id @default(uuid())
   consultationId String       @unique
-  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   doctorId       String
   doctor         Doctor       @relation(fields: [doctorId], references: [id])
+
+  serialNumber Int // Per-doctor sequential number
 
   diagnosis    String
   medications  String  // JSON string: Array of {name, dosage, frequency, duration}
@@ -195,13 +256,16 @@ model Prescription {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([doctorId, serialNumber])
+  @@index([doctorId, createdAt])
 }
 
 // Payment confirmation (manual by doctor)
 model PaymentConfirmation {
   id             String       @id @default(uuid())
   consultationId String       @unique
-  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 
   amount            Float
   confirmedByDoctor Boolean  @default(false)
@@ -212,4 +276,173 @@ model PaymentConfirmation {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Minute purchase transactions (buy extra video minutes)
+model MinutePurchase {
+  id       String @id @default(uuid())
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  minutes Int // Number of minutes purchased (100, 300, 500, 1000)
+  price   Int // Price in paise (9900 for ₹99)
+
+  // Razorpay payment details
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String? @unique
+  paymentStatus     String  @default("PENDING") // "PENDING" | "COMPLETED" | "FAILED"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Post-consultation patient reviews
+model ConsultationReview {
+  id             String       @id @default(uuid())
+  consultationId String       @unique
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  rating     Int     // 1-5 star rating
+  reviewText String? // Optional text feedback
+
+  createdAt DateTime @default(now())
+
+  @@index([consultationId])
+}
+
+// Subscription plans configuration (for admin)
+model SubscriptionPlan {
+  id   String @id @default(uuid())
+  tier String @unique // SubscriptionTier: "TRIAL" | "BASIC" | "PROFESSIONAL" | "ENTERPRISE"
+  name String // Display name
+
+  price               Int // Monthly price in paise (0 for trial)
+  patientLimit        Int // Max patients (-1 for unlimited)
+  monthlyVideoMinutes Int // Monthly video minutes quota
+
+  // Marketing/Display data (JSON strings)
+  features            String  // JSON array of feature strings
+  suggestedFor        String? // JSON array of use case strings (marketing only)
+  avgConsultationTime Int?    // Example avg time in minutes (marketing only)
+
+  active Boolean @default(true)
+
+  // Plan versioning
+  version           Int      @default(1)
+  effectiveFrom     DateTime @default(now())
+  lastModifiedBy    String?  // Admin ID
+  modificationNotes String?
+
+  doctorSubscriptions DoctorSubscriptionHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Medicine database with categories
+model Medicine {
+  id   String @id @default(uuid())
+  name String
+
+  category String // MedicineCategory: "AYURVEDA" | "HOMEOPATHY" | "ALLOPATHY" | "UNANI" | "SIDDHA" | "GENERAL"
+
+  genericName     String?
+  manufacturer    String?
+  dosageForms     String? // JSON: ["Tablet", "Syrup"]
+  commonStrengths String? // JSON: ["500mg", "1g"]
+
+  isVerified Boolean @default(false)
+  isBanned   Boolean @default(false)
+
+  restrictionNotes String?  // Why banned
+  verifiedBy       String?  // Admin ID
+  verifiedAt       DateTime?
+
+  doctorMedicines DoctorMedicine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, category])
+  @@index([category, isVerified, isBanned])
+}
+
+// Doctor's personal medicine list (many-to-many)
+model DoctorMedicine {
+  id         String   @id @default(uuid())
+  doctorId   String
+  doctor     Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  medicineId String
+  medicine   Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  personalNotes String?
+  usageCount    Int     @default(0) // Track frequency
+
+  addedAt DateTime @default(now())
+
+  @@unique([doctorId, medicineId])
+  @@index([doctorId, usageCount])
+}
+
+// Subscription history (snapshot of plan at subscription time)
+model DoctorSubscriptionHistory {
+  id       String @id @default(uuid())
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  tier                String
+  pricePaid           Int    // Snapshot at time of subscription
+  patientLimit        Int
+  monthlyVideoMinutes Int
+  features            String // JSON snapshot
+
+  startedAt DateTime @default(now())
+  endsAt    DateTime
+
+  razorpayPaymentId      String?
+  razorpaySubscriptionId String?
+
+  status String @default("ACTIVE") // SubscriptionHistoryStatus: "ACTIVE" | "COMPLETED" | "CANCELLED"
+
+  createdAt DateTime @default(now())
+
+  @@index([doctorId, status])
+  @@index([endsAt])
+}
+
+// Notification model (for in-app and email notifications)
+model Notification {
+  id        String   @id @default(uuid())
+
+  // Recipient
+  recipientType String  // "DOCTOR" | "ADMIN" | "PATIENT"
+  recipientId   String  // User ID
+
+  // Notification details
+  type        String   // "DOCTOR_VERIFIED" | "DOCTOR_REJECTED" | "NEW_CHAT" | "DOCTOR_REPLY" | "PENDING_DOCTOR"
+  title       String
+  message     String
+
+  // Optional action link
+  actionUrl   String?
+  actionText  String?
+
+  // Metadata (JSON)
+  metadata    String?  // Store additional data as JSON
+
+  // Status
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+
+  // Delivery tracking
+  emailSent   Boolean  @default(false)
+  emailSentAt DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@index([recipientType, recipientId, isRead])
+  @@index([recipientType, recipientId, createdAt])
 }

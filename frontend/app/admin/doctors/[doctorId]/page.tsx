@@ -466,8 +466,8 @@ interface DocumentViewerProps {
 function DocumentViewer({ title, path, type }: DocumentViewerProps) {
   if (!path) {
     return (
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-        <p className="text-sm font-medium text-gray-500">{title}</p>
+      <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
+        <p className="text-xs font-medium text-gray-500">{title}</p>
         <p className="text-xs text-gray-400 mt-1">Not uploaded</p>
       </div>
     );
@@ -477,27 +477,28 @@ function DocumentViewer({ title, path, type }: DocumentViewerProps) {
 
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden">
-      <div className="bg-gray-50 px-4 py-2 border-b border-gray-300">
-        <p className="text-sm font-medium text-gray-700">{title}</p>
+      <div className="bg-gray-50 px-3 py-2 border-b border-gray-300">
+        <p className="text-xs font-medium text-gray-700">{title}</p>
       </div>
-      <div className="p-4">
+      <div className="p-3">
         {type === 'image' ? (
-          <a href={fullUrl} target="_blank" rel="noopener noreferrer">
+          <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="block">
             <img
               src={fullUrl}
               alt={title}
-              className="w-full h-48 object-contain bg-gray-100 rounded cursor-pointer hover:opacity-90 transition"
+              className="w-full h-32 object-cover bg-gray-100 rounded cursor-pointer hover:opacity-90 transition"
             />
+            <p className="text-xs text-center text-blue-600 mt-2">Click to view full size</p>
           </a>
         ) : (
           <a
             href={fullUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="block text-center py-8 text-blue-600 hover:text-blue-700"
+            className="block text-center py-4 text-blue-600 hover:text-blue-700"
           >
-            <div className="text-4xl mb-2">📄</div>
-            <div className="text-sm font-medium">View Document</div>
+            <div className="text-2xl mb-1">📄</div>
+            <div className="text-xs font-medium">View Document</div>
           </a>
         )}
       </div>

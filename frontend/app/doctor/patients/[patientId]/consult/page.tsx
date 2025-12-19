@@ -46,6 +46,20 @@ export default function DoctorConsultationPage() {
   const [videoTokens, setVideoTokens] = useState<any>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
 
+  // Video call timer and subscription tracking (ONLY video time counts)
+  const [videoDuration, setVideoDuration] = useState(0); // in seconds - ONLY video call time
+  const [videoStartTime, setVideoStartTime] = useState<number | null>(null); // When video started
+  const [inOvertime, setInOvertime] = useState(false);
+  const [overtimeMinutes, setOvertimeMinutes] = useState(0);
+  const [showMinuteWarning, setShowMinuteWarning] = useState(false);
+  const [availableMinutes, setAvailableMinutes] = useState<number | null>(null);
+  const [warningLevel, setWarningLevel] = useState<string | null>(null);
+
+  // Tab state and history data
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  const [consultationHistory, setConsultationHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   useEffect(() => {
     if (!isAuthenticated || role !== 'DOCTOR') {
       router.push('/doctor/login');
@@ -74,9 +88,25 @@ export default function DoctorConsultationPage() {
     }
   }, [consultation, joined, user]);
 
+  // Auto-mark messages as read when doctor opens consultation
+  useEffect(() => {
+    if (consultation?.id) {
+      consultationApi.markAsRead(consultation.id).catch((error) => {
+        console.error('Error marking messages as read:', error);
+      });
+    }
+  }, [consultation?.id]);
+
   const startOrGetConsultation = async () => {
     try {
       setLoading(true);
+
+      // Reset socket connection state for new consultation
+      setJoined(false);
+      if (socket) {
+        disconnectSocket();
+        setSocket(null);
+      }
 
       const response = await consultationApi.startConsultation(patientId);
 
@@ -87,10 +117,33 @@ export default function DoctorConsultationPage() {
           chiefComplaint: consult.chiefComplaint || '',
           doctorNotes: consult.doctorNotes || '',
         });
+
+        // Check for minute warnings
+        if (response.data.availableMinutes !== undefined) {
+          setAvailableMinutes(response.data.availableMinutes);
+        }
+        if (response.data.warningLevel) {
+          setWarningLevel(response.data.warningLevel);
+          // Show warning modal if low or critical
+          if (response.data.warningLevel === 'low' || response.data.warningLevel === 'critical') {
+            setShowMinuteWarning(true);
+          }
+          // Redirect if expired/no minutes
+          if (response.data.warningLevel === 'expired' || response.data.availableMinutes === 0) {
+            alert('No video minutes remaining. Please purchase more minutes to start consultations.');
+            router.push('/doctor/subscription');
+            return;
+          }
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting consultation:', error);
-      alert('Failed to start consultation');
+      if (error.response?.status === 403) {
+        alert(error.response?.data?.message || 'Cannot start consultation. Please check your subscription.');
+        router.push('/doctor/subscription');
+      } else {
+        alert('Failed to start consultation');
+      }
     } finally {
       setLoading(false);
     }
@@ -131,17 +184,66 @@ export default function DoctorConsultationPage() {
     }
   };
 
+  // VIDEO TIMER ONLY - runs only when video is active
+  useEffect(() => {
+    if (!isVideoActive || !videoStartTime || !consultation || consultation.status === 'COMPLETED') return;
+
+    const timerInterval = setInterval(() => {
+      const now = new Date().getTime();
+      const elapsedSeconds = Math.floor((now - videoStartTime) / 1000);
+      setVideoDuration(elapsedSeconds);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [isVideoActive, videoStartTime, consultation]);
+
+  // Update backend with VIDEO duration every 30 seconds (only when video is active)
+  useEffect(() => {
+    if (!consultation || consultation.status === 'COMPLETED' || !isVideoActive || videoDuration === 0) return;
+
+    const updateInterval = setInterval(async () => {
+      try {
+        const response = await consultationApi.updateVideoDuration(consultation.id, videoDuration);
+        if (response.success && response.data) {
+          setInOvertime(response.data.inOvertime);
+          setOvertimeMinutes(response.data.overtimeMinutes);
+          setAvailableMinutes(response.data.availableMinutes);
+        }
+      } catch (error) {
+        console.error('Error updating video duration:', error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(updateInterval);
+  }, [consultation, videoDuration, isVideoActive]);
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const endConsultation = async () => {
     if (!confirm('Are you sure you want to end this consultation?')) return;
 
     try {
-      await consultationApi.endConsultation(consultation!.id);
+      // End consultation with ONLY video duration (no total time)
+      await consultationApi.endConsultation(consultation!.id, undefined, videoDuration);
 
       if (socket) {
         socket.emit('end-consultation', { consultationId: consultation!.id });
       }
 
-      alert('Consultation ended successfully');
+      if (inOvertime) {
+        alert(`Consultation ended. You used ${overtimeMinutes} minutes over your available video quota. Please recharge to continue.`);
+      } else {
+        alert('Consultation ended successfully');
+      }
       router.push('/doctor/patients');
     } catch (error) {
       console.error('Error ending consultation:', error);
@@ -157,6 +259,7 @@ export default function DoctorConsultationPage() {
       if (response.success && response.data) {
         setVideoTokens(response.data);
         setIsVideoActive(true);
+        setVideoStartTime(new Date().getTime()); // Start video timer
       }
     } catch (error) {
       console.error('Error starting video call:', error);
@@ -169,7 +272,29 @@ export default function DoctorConsultationPage() {
   const handleVideoLeave = () => {
     setIsVideoActive(false);
     setVideoTokens(null);
+    // Video timer automatically stops when isVideoActive becomes false
   };
+
+  const fetchConsultationHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const response = await consultationApi.getPatientHistory(patientId);
+      if (response.success && response.data) {
+        setConsultationHistory(response.data.consultations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching consultation history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Fetch history when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && consultationHistory.length === 0) {
+      fetchConsultationHistory();
+    }
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -189,44 +314,138 @@ export default function DoctorConsultationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Low Minutes Warning Modal */}
+      {showMinuteWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-3xl">⚠️</span>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">
+                  {warningLevel === 'critical' ? 'Critical: Very Low Minutes' : 'Low Video Minutes'}
+                </h3>
+                <p className="text-sm text-gray-700">
+                  You have only <strong>{availableMinutes} minutes</strong> remaining. The consultation can continue even if you run out, but you'll need to recharge before starting new consultations.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => router.push('/doctor/subscription')}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Buy More Minutes
+              </button>
+              <button
+                onClick={() => setShowMinuteWarning(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+              >
+                Continue Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Consultation with {consultation.patient?.fullName || 'Patient'}
-            </h1>
-            <p className="text-sm text-gray-600">
-              {consultation.patient?.age && `${consultation.patient.age}y`}
-              {consultation.patient?.age && consultation.patient?.gender && ' • '}
-              {consultation.patient?.gender}
-              {consultation.patient?.phone && ` • ${consultation.patient.phone}`}
-            </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Consultation with {consultation.patient?.fullName || 'Patient'}
+              </h1>
+              <p className="text-sm text-gray-600">
+                {consultation.patient?.age && `${consultation.patient.age}y`}
+                {consultation.patient?.age && consultation.patient?.gender && ' • '}
+                {consultation.patient?.gender}
+                {consultation.patient?.phone && ` • ${consultation.patient.phone}`}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Video Timer Display - Only shows when video is active */}
+              {isVideoActive && (
+                <div className={`px-4 py-2 rounded-lg font-mono text-lg font-bold ${inOvertime ? 'bg-red-100 text-red-800 border-2 border-red-300' : 'bg-blue-100 text-blue-800'}`}>
+                  {inOvertime && <span className="text-red-600 text-sm mr-2">⚠️ OVERTIME</span>}
+                  <span className="text-xs mr-2">VIDEO:</span>
+                  {formatDuration(videoDuration)}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={endConsultation}
+                  disabled={consultation.status === 'COMPLETED'}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+                >
+                  End Consultation
+                </button>
+                <Link
+                  href="/doctor/patients"
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+                >
+                  Back to Patients
+                </Link>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={endConsultation}
-              disabled={consultation.status === 'COMPLETED'}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
-            >
-              End Consultation
-            </button>
-            <Link
-              href="/doctor/patients"
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
-            >
-              Back to Patients
-            </Link>
-          </div>
+
+          {/* Overtime Warning Banner */}
+          {inOvertime && (
+            <div className="bg-red-100 border border-red-300 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🚨</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm text-red-900">Overtime: +{overtimeMinutes} minutes over quota</p>
+                  <p className="text-xs text-red-800">You can complete this consultation, but please recharge before starting new ones.</p>
+                </div>
+                <Link
+                  href="/doctor/subscription"
+                  className="px-4 py-2 bg-white text-red-900 rounded hover:bg-red-50 font-medium text-sm"
+                >
+                  Buy Minutes
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('current')}
+                className={`${
+                  activeTab === 'current'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              >
+                📋 Current Consultation
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`${
+                  activeTab === 'history'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              >
+                📚 Consultation History
+              </button>
+            </nav>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Chat/Video Section - 2/3 width */}
+          {/* Main Content Section - 2/3 width */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Video Section */}
-            {isVideoActive && videoTokens ? (
+            {activeTab === 'current' ? (
+              <>
+                {/* Video Section */}
+                {isVideoActive && videoTokens ? (
               <div className="bg-white rounded-lg shadow">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <h2 className="text-lg font-semibold text-gray-900">Video Consultation</h2>
@@ -267,6 +486,132 @@ export default function DoctorConsultationPage() {
                 )}
               </div>
             </div>
+              </>
+            ) : (
+              /* History View */
+              <div className="bg-white rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900">Consultation History</h2>
+                  <p className="text-sm text-gray-600 mt-1">Past consultations with {consultation.patient?.fullName}</p>
+                </div>
+                <div className="p-6">
+                  {loadingHistory ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-3"></div>
+                      <p className="text-gray-600">Loading history...</p>
+                    </div>
+                  ) : consultationHistory.length === 0 ? (
+                    <div className="text-center py-12">
+                      <span className="text-6xl mb-4 block">📋</span>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No Previous Consultations</h3>
+                      <p className="text-gray-600">This is the first consultation with this patient.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {consultationHistory.map((pastConsult: any) => (
+                        <div key={pastConsult.id} className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                          {/* Consultation Header */}
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h3 className="font-semibold text-gray-900">
+                                {new Date(pastConsult.completedAt || pastConsult.startedAt).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                })}
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                {new Date(pastConsult.completedAt || pastConsult.startedAt).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {pastConsult.videoDuration > 0 && (
+                                <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
+                                  📹 {Math.ceil(pastConsult.videoDuration / 60)} min video
+                                </span>
+                              )}
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                pastConsult.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {pastConsult.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Chief Complaint & Notes */}
+                          {(pastConsult.chiefComplaint || pastConsult.doctorNotes) && (
+                            <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-100">
+                              {pastConsult.chiefComplaint && (
+                                <div className="mb-2">
+                                  <h4 className="text-xs font-semibold text-blue-900 mb-1">Chief Complaint:</h4>
+                                  <p className="text-sm text-blue-800">{pastConsult.chiefComplaint}</p>
+                                </div>
+                              )}
+                              {pastConsult.doctorNotes && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-blue-900 mb-1">Doctor's Notes:</h4>
+                                  <p className="text-sm text-blue-800">{pastConsult.doctorNotes}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Prescription */}
+                          {pastConsult.prescription && (
+                            <div className="mb-4">
+                              <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                                <span>💊</span> Prescription
+                              </h4>
+                              <div className="pl-6 space-y-3">
+                                <div>
+                                  <p className="text-sm text-gray-600 font-medium">Diagnosis:</p>
+                                  <p className="text-sm text-gray-900">{pastConsult.prescription.diagnosis}</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-600 font-medium mb-2">Medications:</p>
+                                  <div className="space-y-2">
+                                    {JSON.parse(pastConsult.prescription.medications).map((med: any, idx: number) => (
+                                      <div key={idx} className="bg-gray-50 p-2 rounded text-xs border border-gray-200">
+                                        <p className="font-semibold text-gray-900">{idx + 1}. {med.name}</p>
+                                        <p className="text-gray-600">
+                                          {med.dosage} • {med.frequency} • {med.duration}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {pastConsult.prescription.instructions && (
+                                  <div>
+                                    <p className="text-sm text-gray-600 font-medium">Instructions:</p>
+                                    <p className="text-sm text-gray-900">{pastConsult.prescription.instructions}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Payment Status */}
+                          {pastConsult.paymentConfirmation && (
+                            <div className="mt-3 p-3 bg-green-50 rounded border border-green-200">
+                              <p className="text-sm font-semibold text-green-900 flex items-center gap-2">
+                                <span>✓</span> Payment Confirmed
+                              </p>
+                              <p className="text-xs text-green-700 mt-1">
+                                Amount: ₹{pastConsult.paymentConfirmation.amount} •
+                                Confirmed on {new Date(pastConsult.paymentConfirmation.confirmedAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notes Section - 1/3 width */}

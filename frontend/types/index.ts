@@ -7,6 +7,8 @@ export interface Admin {
   createdAt: string;
 }
 
+export type SubscriptionTier = 'TRIAL' | 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE';
+
 export interface Doctor {
   id: string;
   email: string;
@@ -20,9 +22,15 @@ export interface Doctor {
   status: 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
   rejectionReason?: string;
   subscriptionStatus: 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  subscriptionTier: SubscriptionTier;
   trialEndsAt: string;
   subscriptionEndsAt?: string;
   patientsCreated: number;
+  patientLimit: number;
+  monthlyVideoMinutes: number;
+  purchasedMinutes: number;
+  totalMinutesUsed: number;
+  lastResetDate: string;
   registrationCertificate?: string;
   aadhaarFrontPhoto?: string;
   aadhaarBackPhoto?: string;
@@ -84,4 +92,139 @@ export interface AuthResponse {
   token: string;
   admin?: Admin;
   doctor?: Doctor;
+}
+
+// Subscription types
+export type WarningLevel = 'none' | 'low' | 'critical' | 'expired';
+
+export interface SubscriptionPlan {
+  id: string;
+  tier: SubscriptionTier;
+  name: string;
+  price: number; // in paise
+  patientLimit: number; // -1 for unlimited
+  monthlyVideoMinutes: number;
+  features: string[];
+  suggestedFor?: string[];
+  avgConsultationTime?: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MinutePackage {
+  minutes: number;
+  price: number; // in paise
+  priceDisplay: string;
+  perMinuteCost: string;
+  savings?: number; // percentage
+}
+
+export interface SubscriptionInfo {
+  subscription: {
+    tier: SubscriptionTier;
+    status: 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+    trialEndsAt?: string;
+    subscriptionEndsAt?: string;
+  };
+  usage: {
+    patients: {
+      used: number;
+      limit: number;
+      unlimited: boolean;
+    };
+    videoMinutes: {
+      subscription: number;
+      purchased: number;
+      used: number;
+      available: number;
+    };
+  };
+  status: {
+    canCreatePatients: boolean;
+    canStartConsultations: boolean;
+    warningLevel: WarningLevel;
+    message?: string;
+  };
+}
+
+export interface MinutePurchase {
+  id: string;
+  doctorId: string;
+  minutes: number;
+  price: number;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paymentStatus: 'PENDING' | 'COMPLETED' | 'FAILED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Review types
+export interface ConsultationReview {
+  id: string;
+  consultationId: string;
+  rating: number; // 1-5
+  reviewText?: string;
+  createdAt: string;
+}
+
+export interface ReviewStatistics {
+  totalReviews: number;
+  averageRating: number;
+  distribution: {
+    5: number;
+    4: number;
+    3: number;
+    2: number;
+    1: number;
+  };
+}
+
+// Consultation types (updated)
+export interface Consultation {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  startedAt: string;
+  completedAt?: string;
+  duration?: number; // in seconds
+  wentOvertime?: boolean;
+  overtimeMinutes?: number;
+  chiefComplaint?: string;
+  doctorNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+  review?: ConsultationReview;
+}
+
+// Medicine types
+export type MedicineCategory = 'AYURVEDA' | 'HOMEOPATHY' | 'ALLOPATHY' | 'UNANI' | 'SIDDHA' | 'GENERAL';
+
+export interface Medicine {
+  id: string;
+  name: string;
+  category: MedicineCategory;
+  genericName?: string;
+  manufacturer?: string;
+  dosageForms?: string[];
+  commonStrengths?: string[];
+  isVerified: boolean;
+  isBanned: boolean;
+  restrictionNotes?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DoctorMedicine {
+  id: string;
+  doctorId: string;
+  medicineId: string;
+  medicine: Medicine;
+  personalNotes?: string;
+  usageCount: number;
+  addedAt: string;
 }

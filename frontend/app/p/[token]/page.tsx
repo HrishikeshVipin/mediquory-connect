@@ -23,6 +23,10 @@ interface Consultation {
     upiId?: string;
     qrCodeImage?: string;
   };
+  patient?: {
+    status?: string;
+    fullName?: string;
+  };
   chatMessages: any[];
   prescription?: {
     id: string;
@@ -176,6 +180,20 @@ export default function PatientAccessPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Waitlist Status Message */}
+        {consultation.patient?.status === 'WAITLISTED' && (
+          <div className="mb-6 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-2xl">⏳</span>
+              <h3 className="font-bold text-orange-900">You're on the Waiting List</h3>
+            </div>
+            <p className="text-orange-800 text-sm">
+              You can chat with Dr. {consultation.doctor.fullName}, but full consultation features
+              (video call, prescriptions) will be available once the doctor activates your account.
+            </p>
+          </div>
+        )}
+
         {/* Doctor Information */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -229,21 +247,23 @@ export default function PatientAccessPage() {
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-900">Consultation Chat</h2>
-            {!isVideoActive ? (
-              <button
-                onClick={joinVideoCall}
-                disabled={loadingVideo}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {loadingVideo ? 'Joining Video...' : '📹 Join Video Call'}
-              </button>
-            ) : (
-              <button
-                onClick={handleVideoLeave}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
-              >
-                Leave Video Call
-              </button>
+            {consultation.patient?.status !== 'WAITLISTED' && (
+              !isVideoActive ? (
+                <button
+                  onClick={joinVideoCall}
+                  disabled={loadingVideo}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {loadingVideo ? 'Joining Video...' : '📹 Join Video Call'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleVideoLeave}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
+                >
+                  Leave Video Call
+                </button>
+              )
             )}
           </div>
           <div className="p-6">
@@ -264,20 +284,22 @@ export default function PatientAccessPage() {
           </div>
         </div>
 
-        {/* Vitals and File Upload Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <VitalsForm
-            patientId={consultation.id}
-            accessToken={token}
-          />
-          <FileUpload
-            patientId={consultation.id}
-            accessToken={token}
-          />
-        </div>
+        {/* Vitals and File Upload Section - Only for Active Patients */}
+        {consultation.patient?.status !== 'WAITLISTED' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <VitalsForm
+              patientId={consultation.id}
+              accessToken={token}
+            />
+            <FileUpload
+              patientId={consultation.id}
+              accessToken={token}
+            />
+          </div>
+        )}
 
-        {/* Payment & Prescription Section */}
-        {consultation.prescription && (
+        {/* Payment & Prescription Section - Only for Active Patients */}
+        {consultation.patient?.status !== 'WAITLISTED' && consultation.prescription && (
           <div className="mb-6">
             <PaymentSection
               consultationId={consultation.id}

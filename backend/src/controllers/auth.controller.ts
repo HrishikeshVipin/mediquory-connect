@@ -9,6 +9,7 @@ import {
   validateDoctorSignup,
   validateFileUploads,
 } from '../utils/validators';
+import { notificationService } from '../services/notification.service';
 
 // Doctor Signup
 export const doctorSignup = async (req: Request, res: Response): Promise<void> => {
@@ -84,10 +85,33 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
         id: true,
         email: true,
         fullName: true,
+        specialization: true,
         status: true,
         createdAt: true,
       },
     });
+
+    // Notify all admins about new doctor registration
+    const admins = await prisma.admin.findMany({
+      select: { id: true, email: true },
+    });
+
+    for (const admin of admins) {
+      await notificationService.createNotification({
+        recipientType: 'ADMIN',
+        recipientId: admin.id,
+        type: 'PENDING_DOCTOR',
+        title: '👨‍⚕️ New Doctor Registration',
+        message: `Dr. ${doctor.fullName} (${validatedData.specialization}) has registered and is awaiting verification.`,
+        actionUrl: `/admin/doctors/${doctor.id}`,
+        actionText: 'Review Application',
+        metadata: {
+          doctorId: doctor.id,
+          doctorName: doctor.fullName,
+          specialization: validatedData.specialization,
+        },
+      });
+    }
 
     res.status(201).json({
       success: true,

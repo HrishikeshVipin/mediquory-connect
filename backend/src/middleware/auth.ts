@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
 
-// Extend Express Request type to include user
+// Extend Express Request type to include user and doctorId
 declare global {
   namespace Express {
     interface Request {
@@ -12,6 +12,8 @@ declare global {
         role: 'DOCTOR' | 'ADMIN';
         status?: string;
       };
+      doctorId?: string;
+      adminId?: string;
     }
   }
 }
@@ -130,6 +132,9 @@ export const isDoctor = async (
     return;
   }
 
+  // Add doctorId to request for easy access in controllers
+  (req as any).doctorId = req.user.id;
+
   next();
 };
 
@@ -154,6 +159,9 @@ export const isAdmin = async (
     });
     return;
   }
+
+  // Add adminId to request for easy access in controllers
+  (req as any).adminId = req.user.id;
 
   next();
 };

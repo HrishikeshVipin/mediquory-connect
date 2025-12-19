@@ -10,6 +10,15 @@ import {
   reactivateDoctor,
   updateDoctorSubscription,
 } from '../controllers/admin.controller';
+import {
+  getAllPlans,
+  createPlan,
+  updatePlan,
+  deactivatePlan,
+  activatePlan,
+  grantFeaturesToDoctor,
+  getPlanHistory,
+} from '../controllers/subscriptionPlanAdmin.controller';
 import { verifyToken, isAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -33,5 +42,14 @@ router.put('/doctors/:doctorId/reactivate', reactivateDoctor);
 
 // Subscription management
 router.put('/doctors/:doctorId/subscription', updateDoctorSubscription);
+
+// Subscription plan management
+router.get('/subscription-plans', getAllPlans);
+router.post('/subscription-plans', createPlan);
+router.put('/subscription-plans/:planId', updatePlan);
+router.put('/subscription-plans/:planId/deactivate', deactivatePlan);
+router.put('/subscription-plans/:planId/activate', activatePlan);
+router.put('/doctors/:doctorId/grant-features', grantFeaturesToDoctor);
+router.get('/subscription-plans/:tier/history', getPlanHistory);
 
 export default router;

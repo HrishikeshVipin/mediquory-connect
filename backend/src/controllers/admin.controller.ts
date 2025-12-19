@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { doctorVerificationSchema, validateDoctorVerification, maskAadhaar } from '../utils/validators';
+import { notificationService } from '../services/notification.service';
 
 // Get platform statistics
 export const getPlatformStats = async (req: Request, res: Response): Promise<void> => {
@@ -282,8 +283,23 @@ export const verifyDoctor = async (req: Request, res: Response): Promise<void> =
         email: true,
         fullName: true,
         status: true,
+        emailNotifications: true,
         updatedAt: true,
       },
+    });
+
+    // Send notification to doctor
+    await notificationService.createNotification({
+      recipientType: 'DOCTOR',
+      recipientId: updatedDoctor.id,
+      type: 'DOCTOR_VERIFIED',
+      title: '✅ Registration Approved',
+      message: 'Your registration has been approved. You can now start using Bhishak Med.',
+      actionUrl: '/doctor/dashboard',
+      actionText: 'Go to Dashboard',
+      metadata: { doctorName: updatedDoctor.fullName },
+      sendEmail: updatedDoctor.emailNotifications,
+      recipientEmail: updatedDoctor.email,
     });
 
     res.status(200).json({
@@ -337,8 +353,21 @@ export const rejectDoctor = async (req: Request, res: Response): Promise<void> =
         fullName: true,
         status: true,
         rejectionReason: true,
+        emailNotifications: true,
         updatedAt: true,
       },
+    });
+
+    // Send notification to doctor
+    await notificationService.createNotification({
+      recipientType: 'DOCTOR',
+      recipientId: updatedDoctor.id,
+      type: 'DOCTOR_REJECTED',
+      title: '❌ Registration Update',
+      message: `Your registration was not approved. Reason: ${validatedData.rejectionReason}`,
+      metadata: { doctorName: updatedDoctor.fullName, reason: validatedData.rejectionReason },
+      sendEmail: updatedDoctor.emailNotifications,
+      recipientEmail: updatedDoctor.email,
     });
 
     res.status(200).json({

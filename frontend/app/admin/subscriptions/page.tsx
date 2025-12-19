@@ -34,7 +34,7 @@ export default function SubscriptionsPage() {
     try {
       const response = await adminApi.getAllDoctors({ status: 'VERIFIED' });
       if (response.success && response.data) {
-        setDoctors(response.data);
+        setDoctors(response.data.doctors || []);
       }
     } catch (error) {
       console.error('Error fetching doctors:', error);

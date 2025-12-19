@@ -9,6 +9,7 @@ import {
 } from '../controllers/auth.controller';
 import { uploadDoctorKYC } from '../middleware/upload';
 import { verifyToken } from '../middleware/auth';
+import { authLimiter, registrationLimiter, uploadLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -30,11 +31,11 @@ const handleMulterError = (err: any, req: Request, res: Response, next: NextFunc
 };
 
 // Doctor routes
-router.post('/doctor/signup', uploadDoctorKYC, handleMulterError, doctorSignup);
-router.post('/doctor/login', doctorLogin);
+router.post('/doctor/signup', registrationLimiter, uploadLimiter, uploadDoctorKYC, handleMulterError, doctorSignup);
+router.post('/doctor/login', authLimiter, doctorLogin);
 
 // Admin routes
-router.post('/admin/login', adminLogin);
+router.post('/admin/login', authLimiter, adminLogin);
 
 // Common routes
 router.post('/logout', logout);

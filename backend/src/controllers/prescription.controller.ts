@@ -29,6 +29,7 @@ export const createPrescription = async (req: Request, res: Response): Promise<v
             fullName: true,
             age: true,
             gender: true,
+            status: true,
           },
         },
       },
@@ -38,6 +39,15 @@ export const createPrescription = async (req: Request, res: Response): Promise<v
       res.status(404).json({
         success: false,
         message: 'Consultation not found',
+      });
+      return;
+    }
+
+    // Block prescription creation for waitlisted patients
+    if (consultation.patient.status === 'WAITLISTED') {
+      res.status(403).json({
+        success: false,
+        message: `Cannot create prescription. ${consultation.patient.fullName} is on the waiting list.`,
       });
       return;
     }
@@ -55,19 +65,30 @@ export const createPrescription = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    // Create prescription
-    const prescription = await prisma.prescription.create({
-      data: {
-        consultationId,
-        doctorId: consultation.doctorId,
-        diagnosis,
-        medications: JSON.stringify(medications || []),
-        instructions: instructions || null,
-      },
+    // Create prescription with atomic serial number generation
+    const prescription = await prisma.$transaction(async (tx) => {
+      // 1. Increment doctor's serial number atomically
+      const updatedDoctor = await tx.doctor.update({
+        where: { id: consultation.doctorId },
+        data: { lastPrescriptionSerial: { increment: 1 } },
+        select: { lastPrescriptionSerial: true },
+      });
+
+      // 2. Create prescription with new serial number
+      return await tx.prescription.create({
+        data: {
+          consultationId,
+          doctorId: consultation.doctorId,
+          serialNumber: updatedDoctor.lastPrescriptionSerial,
+          diagnosis,
+          medications: JSON.stringify(medications || []),
+          instructions: instructions || null,
+        },
+      });
     });
 
     // Generate PDF
-    const pdfPath = await generatePrescriptionPDF(prescription.id, consultation, diagnosis, medications, instructions);
+    const pdfPath = await generatePrescriptionPDF(prescription, consultation, diagnosis, medications, instructions);
 
     // Update prescription with PDF path
     const updatedPrescription = await prisma.prescription.update({
@@ -138,7 +159,7 @@ export const getPrescription = async (req: Request, res: Response): Promise<void
 
 // Generate prescription PDF
 async function generatePrescriptionPDF(
-  prescriptionId: string,
+  prescription: any,
   consultation: any,
   diagnosis: string,
   medications: any[],
@@ -152,7 +173,7 @@ async function generatePrescriptionPDF(
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
 
-      const fileName = `prescription_${prescriptionId}_${Date.now()}.pdf`;
+      const fileName = `prescription_${prescription.id}_${Date.now()}.pdf`;
       const filePath = path.join(uploadsDir, fileName);
       const relativePath = `uploads/prescriptions/${fileName}`;
 
@@ -167,6 +188,13 @@ async function generatePrescriptionPDF(
         .fontSize(20)
         .font('Helvetica-Bold')
         .text('MEDICAL PRESCRIPTION', { align: 'center' })
+        .moveDown();
+
+      // Serial Number (top-right)
+      doc
+        .fontSize(14)
+        .font('Helvetica-Bold')
+        .text(`Prescription #${prescription.serialNumber}`, { align: 'right' })
         .moveDown();
 
       // Doctor Info
@@ -240,6 +268,9 @@ async function generatePrescriptionPDF(
       // Footer
       doc
         .moveDown(2)
+        .fontSize(8)
+        .text(`Prescription #${prescription.serialNumber} | Generated on ${new Date().toLocaleString()}`, { align: 'left' })
+        .moveDown()
         .fontSize(10)
         .text('_________________________', { align: 'right' })
         .text(`Dr. ${consultation.doctor.fullName}`, { align: 'right' })
@@ -309,6 +340,167 @@ export const downloadPrescription = async (req: Request, res: Response): Promise
     res.status(500).json({
       success: false,
       message: 'Error downloading prescription',
+      error: error.message,
+    });
+  }
+};
+
+// Get patient consultation history with prescriptions
+export const getPatientConsultationHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.params;
+    const doctorId = (req as any).doctorId; // From auth middleware
+
+    console.log('[DEBUG] Fetching patient history - Doctor:', doctorId, 'Patient:', patientId);
+
+    // Verify patient belongs to this doctor
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    });
+
+    if (!patient) {
+      console.log('[ERROR] Patient not found:', patientId);
+      res.status(404).json({
+        success: false,
+        message: 'Patient not found',
+      });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      console.log('[ERROR] Patient ownership mismatch. Patient doctorId:', patient.doctorId, 'Authenticated doctorId:', doctorId);
+      res.status(403).json({
+        success: false,
+        message: 'Access denied: This patient does not belong to you',
+      });
+      return;
+    }
+
+    // Get all COMPLETED consultations with prescriptions
+    const consultations = await prisma.consultation.findMany({
+      where: {
+        patientId,
+        status: 'COMPLETED',
+      },
+      include: {
+        prescription: {
+          include: {
+            doctor: {
+              select: {
+                fullName: true,
+                specialization: true,
+              },
+            },
+          },
+        },
+        paymentConfirmation: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Filter consultations that have prescriptions and parse medications
+    const consultationsWithPrescriptions = consultations
+      .filter((c) => c.prescription)
+      .map((consultation) => ({
+        id: consultation.id,
+        date: consultation.createdAt,
+        completedAt: consultation.completedAt,
+        duration: consultation.duration,
+        prescription: {
+          id: consultation.prescription!.id,
+          serialNumber: consultation.prescription!.serialNumber,
+          diagnosis: consultation.prescription!.diagnosis,
+          medications: JSON.parse(consultation.prescription!.medications),
+          instructions: consultation.prescription!.instructions,
+          createdAt: consultation.prescription!.createdAt,
+          doctor: consultation.prescription!.doctor,
+        },
+        paymentConfirmed: consultation.paymentConfirmation?.confirmedByDoctor || false,
+      }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        patient: {
+          id: patient.id,
+          fullName: patient.fullName,
+        },
+        consultations: consultationsWithPrescriptions,
+        count: consultationsWithPrescriptions.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get patient consultation history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching consultation history',
+      error: error.message,
+    });
+  }
+};
+
+// Copy prescription medications for reuse
+export const copyPrescriptionMedications = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { prescriptionId } = req.params;
+    const doctorId = (req as any).doctorId; // From auth middleware
+
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        consultation: {
+          include: {
+            patient: {
+              select: {
+                fullName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!prescription) {
+      res.status(404).json({
+        success: false,
+        message: 'Prescription not found',
+      });
+      return;
+    }
+
+    // Verify prescription belongs to this doctor
+    if (prescription.doctorId !== doctorId) {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied: This prescription does not belong to you',
+      });
+      return;
+    }
+
+    // Return medications and diagnosis for copying
+    res.status(200).json({
+      success: true,
+      message: 'Prescription data ready for copying',
+      data: {
+        prescription: {
+          id: prescription.id,
+          serialNumber: prescription.serialNumber,
+          diagnosis: prescription.diagnosis,
+          medications: JSON.parse(prescription.medications),
+          instructions: prescription.instructions,
+          patientName: prescription.consultation.patient.fullName,
+          createdAt: prescription.createdAt,
+        },
+        note: 'This data can be used to pre-fill a new prescription form',
+      },
+    });
+  } catch (error: any) {
+    console.error('Copy prescription medications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error copying prescription',
       error: error.message,
     });
   }

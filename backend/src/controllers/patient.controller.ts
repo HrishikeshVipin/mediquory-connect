@@ -18,15 +18,18 @@ export const createPatient = async (req: Request, res: Response): Promise<void> 
     // Validate input
     const validatedData = createPatientSchema.parse(req.body);
 
-    // Get doctor details to check trial limits
+    // Get doctor details to check subscription and limits
     const doctor = await prisma.doctor.findUnique({
       where: { id: doctorId },
       select: {
         id: true,
-        subscriptionStatus: true,
-        patientsCreated: true,
-        trialEndsAt: true,
         status: true,
+        subscriptionStatus: true,
+        subscriptionTier: true,
+        trialEndsAt: true,
+        subscriptionEndsAt: true,
+        patientsCreated: true,
+        patientLimit: true,
       },
     });
 
@@ -46,37 +49,40 @@ export const createPatient = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Check trial limits
+    // Check subscription validity
+    const now = new Date();
     if (doctor.subscriptionStatus === 'TRIAL') {
-      // Check if trial has expired
-      if (new Date() > new Date(doctor.trialEndsAt)) {
+      const trialEnd = new Date(doctor.trialEndsAt);
+      if (now > trialEnd) {
         res.status(403).json({
           success: false,
-          message: 'Your trial period has expired. Please subscribe to continue creating patients.',
+          message: 'Trial period expired. Please subscribe to create patients.',
           trialExpired: true,
         });
         return;
       }
-
-      // Check patient limit (max 2 during trial)
-      if (doctor.patientsCreated >= 2) {
-        res.status(403).json({
-          success: false,
-          message: 'Trial limit reached. You can create maximum 2 patients during trial. Please subscribe to create more patients.',
-          trialLimitReached: true,
-        });
-        return;
-      }
-    }
-
-    // Check if subscription is expired
-    if (doctor.subscriptionStatus === 'EXPIRED') {
+    } else if (doctor.subscriptionStatus === 'EXPIRED' || doctor.subscriptionStatus === 'CANCELLED') {
       res.status(403).json({
         success: false,
-        message: 'Your subscription has expired. Please renew to create patients.',
+        message: 'Subscription expired. Please renew to create patients.',
         subscriptionExpired: true,
       });
       return;
+    }
+
+    // Check patient limit (skip for ENTERPRISE tier which has unlimited patients)
+    if (doctor.subscriptionTier !== 'ENTERPRISE') {
+      if (doctor.patientsCreated >= doctor.patientLimit) {
+        res.status(403).json({
+          success: false,
+          message: `Patient limit reached (${doctor.patientLimit}). Please upgrade your subscription to create more patients.`,
+          limitReached: true,
+          currentTier: doctor.subscriptionTier,
+          patientsCreated: doctor.patientsCreated,
+          patientLimit: doctor.patientLimit,
+        });
+        return;
+      }
     }
 
     // Create the patient
@@ -140,15 +146,20 @@ export const createPatient = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// Get all patients for a doctor
+// Get all patients for a doctor with optional filter
 export const getDoctorPatients = async (req: Request, res: Response): Promise<void> => {
   try {
     const doctorId = (req as any).user.id;
-    const { search, page = 1, limit = 10 } = req.query;
+    const { search, page = 1, limit = 10, createdVia } = req.query;
 
     const where: any = {
       doctorId: doctorId,
     };
+
+    // Add createdVia filter
+    if (createdVia && (createdVia === 'MANUAL' || createdVia === 'SELF_REGISTERED')) {
+      where.createdVia = createdVia;
+    }
 
     if (search) {
       where.OR = [
@@ -161,7 +172,7 @@ export const getDoctorPatients = async (req: Request, res: Response): Promise<vo
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const [patients, total] = await Promise.all([
+    const [patients, total, manualCount, selfRegisteredCount, activeCount, waitlistedCount] = await Promise.all([
       prisma.patient.findMany({
         where,
         select: {
@@ -172,6 +183,9 @@ export const getDoctorPatients = async (req: Request, res: Response): Promise<vo
           gender: true,
           accessToken: true,
           createdAt: true,
+          createdVia: true,
+          status: true,
+          videoCallEnabled: true,
           _count: {
             select: {
               consultations: true,
@@ -183,6 +197,10 @@ export const getDoctorPatients = async (req: Request, res: Response): Promise<vo
         take: limitNum,
       }),
       prisma.patient.count({ where }),
+      prisma.patient.count({ where: { doctorId, createdVia: 'MANUAL' } }),
+      prisma.patient.count({ where: { doctorId, createdVia: 'SELF_REGISTERED' } }),
+      prisma.patient.count({ where: { doctorId, status: 'ACTIVE' } }),
+      prisma.patient.count({ where: { doctorId, status: 'WAITLISTED' } }),
     ]);
 
     // Add shareable link to each patient
@@ -200,6 +218,13 @@ export const getDoctorPatients = async (req: Request, res: Response): Promise<vo
           limit: limitNum,
           total,
           totalPages: Math.ceil(total / limitNum),
+        },
+        stats: {
+          total: manualCount + selfRegisteredCount,
+          manual: manualCount,
+          selfRegistered: selfRegisteredCount,
+          active: activeCount,
+          waitlisted: waitlistedCount,
         },
       },
     });
@@ -391,6 +416,447 @@ export const getPatientByToken = async (req: Request, res: Response): Promise<vo
     res.status(500).json({
       success: false,
       message: 'Error fetching patient details',
+      error: error.message,
+    });
+  }
+};
+
+// Patient self-registration via doctor's shareable link (PUBLIC - no auth)
+export const selfRegisterPatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, fullName, phone, age, gender } = req.body;
+
+    // Validate input
+    if (!doctorId || !fullName || !phone) {
+      res.status(400).json({
+        success: false,
+        message: 'Doctor ID, full name, and phone are required',
+      });
+      return;
+    }
+
+    // Get doctor and verify they exist
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: {
+        id: true,
+        fullName: true,
+        specialization: true,
+        email: true,
+        phone: true,
+        profilePhoto: true,
+        status: true,
+        subscriptionStatus: true,
+        subscriptionTier: true,
+        trialEndsAt: true,
+        subscriptionEndsAt: true,
+        patientsCreated: true,
+        patientLimit: true,
+        allowSelfRegistration: true,
+      },
+    });
+
+    if (!doctor) {
+      res.status(404).json({
+        success: false,
+        message: 'Doctor not found. Please check the registration link.',
+      });
+      return;
+    }
+
+    // Check if doctor allows self-registration
+    if (!doctor.allowSelfRegistration) {
+      res.status(403).json({
+        success: false,
+        message: 'This doctor has disabled patient self-registration. Please contact them directly.',
+      });
+      return;
+    }
+
+    // Check if doctor is verified
+    if (doctor.status !== 'VERIFIED') {
+      res.status(403).json({
+        success: false,
+        message: 'This doctor account is not yet verified. Please try again later.',
+      });
+      return;
+    }
+
+    // Check subscription validity
+    const now = new Date();
+    if (doctor.subscriptionStatus === 'TRIAL') {
+      if (now > new Date(doctor.trialEndsAt)) {
+        res.status(403).json({
+          success: false,
+          message: "This doctor's trial period has expired. Please contact them to renew their subscription.",
+        });
+        return;
+      }
+    } else if (doctor.subscriptionStatus === 'EXPIRED' || doctor.subscriptionStatus === 'CANCELLED') {
+      res.status(403).json({
+        success: false,
+        message: "This doctor's subscription has expired. Please contact them to renew.",
+      });
+      return;
+    }
+
+    // All self-registered patients default to WAITLISTED
+    const patientStatus = 'WAITLISTED';
+
+    // Check for duplicate phone number under this doctor
+    const existingPatient = await prisma.patient.findFirst({
+      where: {
+        doctorId: doctor.id,
+        phone: phone,
+      },
+    });
+
+    if (existingPatient) {
+      res.status(409).json({
+        success: false,
+        message: 'A patient with this phone number already exists for this doctor.',
+        data: {
+          patientAccessLink: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/p/${existingPatient.accessToken}`,
+        },
+      });
+      return;
+    }
+
+    // Create patient
+    const patient = await prisma.patient.create({
+      data: {
+        fullName,
+        phone,
+        age: age || null,
+        gender: gender || null,
+        doctorId: doctor.id,
+        createdVia: 'SELF_REGISTERED',
+        status: patientStatus,
+        activatedAt: null, // Will be set when doctor activates the patient
+      },
+    });
+
+    // Don't increment counter for self-registered patients
+    // Counter will increment when doctor activates them
+
+    // Generate patient access link
+    const patientAccessLink = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/p/${patient.accessToken}`;
+
+    res.status(201).json({
+      success: true,
+      message: `Registered successfully! You're on the waitlist. Dr. ${doctor.fullName} will activate your account soon.`,
+      data: {
+        patient: {
+          id: patient.id,
+          fullName: patient.fullName,
+          phone: patient.phone,
+          status: patientStatus,
+        },
+        doctor: {
+          fullName: doctor.fullName,
+          specialization: doctor.specialization,
+        },
+        patientAccessLink,
+        isWaitlisted: true,
+        instructions: 'You are on the waiting list. You can chat with the doctor, but consultations require activation.',
+      },
+    });
+  } catch (error: any) {
+    console.error('Self-register patient error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error registering patient',
+      error: error.message,
+    });
+  }
+};
+
+// Activate a waitlisted patient
+export const activatePatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { patientId } = req.params;
+
+    const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+
+    if (!patient) {
+      res.status(404).json({ success: false, message: 'Patient not found' });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      res.status(403).json({ success: false, message: 'Access denied' });
+      return;
+    }
+
+    if (patient.status === 'ACTIVE') {
+      res.status(400).json({ success: false, message: 'Patient is already active' });
+      return;
+    }
+
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: { patientLimit: true, patientsCreated: true, subscriptionTier: true },
+    });
+
+    if (!doctor) {
+      res.status(404).json({
+        success: false,
+        message: 'Doctor not found',
+      });
+      return;
+    }
+
+    if (doctor.subscriptionTier !== 'ENTERPRISE' && doctor.patientsCreated >= doctor.patientLimit) {
+      res.status(403).json({
+        success: false,
+        message: `Cannot activate patient. You have reached your patient limit (${doctor.patientLimit}).`,
+      });
+      return;
+    }
+
+    const updatedPatient = await prisma.patient.update({
+      where: { id: patientId },
+      data: { status: 'ACTIVE', activatedAt: new Date() },
+    });
+
+    await prisma.doctor.update({
+      where: { id: doctorId },
+      data: { patientsCreated: { increment: 1 } },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Patient activated successfully',
+      data: { patient: updatedPatient },
+    });
+  } catch (error: any) {
+    console.error('Activate patient error:', error);
+    res.status(500).json({ success: false, message: 'Error activating patient' });
+  }
+};
+
+// Get doctor info for patient registration page (PUBLIC - no auth)
+export const getDoctorInfoForRegistration = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId } = req.params;
+
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: {
+        id: true,
+        fullName: true,
+        specialization: true,
+        phone: true,
+        email: true,
+        profilePhoto: true,
+        status: true,
+        allowSelfRegistration: true,
+        subscriptionStatus: true,
+        _count: {
+          select: {
+            patients: true,
+          },
+        },
+      },
+    });
+
+    if (!doctor) {
+      res.status(404).json({
+        success: false,
+        message: 'Doctor not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        doctor: {
+          id: doctor.id,
+          fullName: doctor.fullName,
+          specialization: doctor.specialization,
+          phone: doctor.phone,
+          email: doctor.email,
+          profilePhoto: doctor.profilePhoto,
+          isAcceptingPatients:
+            doctor.status === 'VERIFIED' &&
+            doctor.allowSelfRegistration &&
+            (doctor.subscriptionStatus === 'ACTIVE' || doctor.subscriptionStatus === 'TRIAL'),
+          patientCount: doctor._count.patients,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Get doctor info error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching doctor information',
+      error: error.message,
+    });
+  }
+};
+
+// Toggle doctor's self-registration setting (Doctor only)
+export const toggleSelfRegistration = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { enabled } = req.body;
+
+    const doctor = await prisma.doctor.update({
+      where: { id: doctorId },
+      data: {
+        allowSelfRegistration: enabled,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        allowSelfRegistration: true,
+      },
+    });
+
+    const registrationLink = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/join/${doctor.id}`;
+
+    res.status(200).json({
+      success: true,
+      message: `Self-registration ${enabled ? 'enabled' : 'disabled'} successfully`,
+      data: {
+        allowSelfRegistration: doctor.allowSelfRegistration,
+        registrationLink: enabled ? registrationLink : null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Toggle self-registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating self-registration setting',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Toggle video call for a patient
+ * PUT /api/patients/:patientId/video-call
+ * Doctor only
+ */
+export const toggleVideoCall = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { patientId } = req.params;
+    const { enabled } = req.body;
+
+    // Check if patient exists and belongs to doctor
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    });
+
+    if (!patient) {
+      res.status(404).json({
+        success: false,
+        message: 'Patient not found',
+      });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied: This patient does not belong to you',
+      });
+      return;
+    }
+
+    // Update video call enabled status
+    const updatedPatient = await prisma.patient.update({
+      where: { id: patientId },
+      data: { videoCallEnabled: enabled },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Video call ${enabled ? 'enabled' : 'disabled'} for patient`,
+      data: { patient: updatedPatient },
+    });
+  } catch (error: any) {
+    console.error('Toggle video call error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating video call setting',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Delete a patient and all related data
+ * DELETE /api/patients/:patientId
+ * Doctor only
+ */
+export const deletePatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { patientId } = req.params;
+
+    // Check if patient exists and belongs to doctor
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      include: {
+        _count: {
+          select: {
+            consultations: true,
+            vitals: true,
+            medicalUploads: true,
+          },
+        },
+      },
+    });
+
+    if (!patient) {
+      res.status(404).json({
+        success: false,
+        message: 'Patient not found',
+      });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied: This patient does not belong to you',
+      });
+      return;
+    }
+
+    // Delete all related data (cascading delete via Prisma schema)
+    await prisma.patient.delete({
+      where: { id: patientId },
+    });
+
+    // Decrement doctor's patient count if patient was ACTIVE
+    if (patient.status === 'ACTIVE') {
+      await prisma.doctor.update({
+        where: { id: doctorId },
+        data: { patientsCreated: { decrement: 1 } },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Patient and all related data deleted successfully',
+      data: {
+        deletedCount: {
+          consultations: patient._count.consultations,
+          vitals: patient._count.vitals,
+          medicalUploads: patient._count.medicalUploads,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Delete patient error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting patient',
       error: error.message,
     });
   }

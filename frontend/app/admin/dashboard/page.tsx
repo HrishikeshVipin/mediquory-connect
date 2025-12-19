@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { adminApi, authApi } from '../../../lib/api';
 import { useAuthStore } from '../../../store/authStore';
+import { connectSocket } from '../../../lib/socket';
+import { NotificationProvider } from '../../../context/NotificationContext';
+import NotificationBell from '../../../components/NotificationBell';
 import type { PlatformStats } from '../../../types';
 
 export default function AdminDashboard() {
@@ -39,10 +42,26 @@ export default function AdminDashboard() {
 
     if (isAuthenticated && role === 'ADMIN') {
       fetchStats();
+
+      // Connect to socket for real-time updates
+      const socket = connectSocket();
+      socket.emit('join-admin-room', { adminId: user?.id });
+
+      // Listen for new doctor registration notifications
+      socket.on('notification', (notification: any) => {
+        if (notification.type === 'PENDING_DOCTOR') {
+          // Refresh stats when new doctor registers
+          fetchStats();
+        }
+      });
+
+      return () => {
+        socket.off('notification');
+      };
     } else {
       setLoading(false);
     }
-  }, [isAuthenticated, role]);
+  }, [isAuthenticated, role, user?.id]);
 
   const handleLogout = async () => {
     try {
@@ -68,22 +87,26 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-sm text-gray-600">Welcome, {user?.fullName || 'Admin'}</p>
+    <NotificationProvider>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="text-sm text-gray-600">Welcome, {user?.fullName || 'Admin'}</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <NotificationBell />
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Logout
-          </button>
-        </div>
-      </header>
+        </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Grid */}
@@ -160,10 +183,19 @@ export default function AdminDashboard() {
               <h3 className="font-semibold text-purple-800">Subscriptions</h3>
               <p className="text-sm text-gray-600 mt-1">Manage subscriptions</p>
             </Link>
+
+            <Link
+              href="/admin/subscription-plans"
+              className="p-4 border-2 border-green-300 rounded-lg hover:bg-green-50 transition"
+            >
+              <h3 className="font-semibold text-green-800">Subscription Plans</h3>
+              <p className="text-sm text-gray-600 mt-1">Manage pricing and features</p>
+            </Link>
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </NotificationProvider>
   );
 }
 

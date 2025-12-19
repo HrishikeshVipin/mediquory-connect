@@ -17,18 +17,68 @@ export const startConsultation = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    // Get doctor with subscription info
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: {
+        subscriptionStatus: true,
+        subscriptionTier: true,
+        trialEndsAt: true,
+        subscriptionEndsAt: true,
+        monthlyVideoMinutes: true,
+        purchasedMinutes: true,
+        totalMinutesUsed: true,
+      },
+    });
+
+    if (!doctor) {
+      res.status(404).json({
+        success: false,
+        message: 'Doctor not found',
+      });
+      return;
+    }
+
+    // Check subscription status
+    const now = new Date();
+    if (doctor.subscriptionStatus === 'TRIAL') {
+      const trialEnd = new Date(doctor.trialEndsAt);
+      if (now > trialEnd) {
+        res.status(403).json({
+          success: false,
+          message: 'Trial period expired. Please subscribe to continue consultations.',
+          trialExpired: true,
+        });
+        return;
+      }
+    } else if (doctor.subscriptionStatus === 'EXPIRED' || doctor.subscriptionStatus === 'CANCELLED') {
+      res.status(403).json({
+        success: false,
+        message: 'Subscription expired. Please renew to start consultations.',
+        subscriptionExpired: true,
+      });
+      return;
+    }
+
+    // Check available video minutes (for information only - chat is always available)
+    const availableMinutes =
+      (doctor.monthlyVideoMinutes + doctor.purchasedMinutes) - doctor.totalMinutesUsed;
+
     // Verify patient belongs to this doctor
+    // Note: Waitlisted patients CAN chat (limited features only)
+    // Feature restrictions enforced at feature level (video, prescriptions, vitals)
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
         doctorId: doctorId,
       },
+      select: { id: true, status: true, fullName: true, doctorId: true, videoCallEnabled: true },
     });
 
     if (!patient) {
       res.status(404).json({
         success: false,
-        message: 'Patient not found or access denied',
+        message: 'Patient not found or does not belong to you',
       });
       return;
     }
@@ -87,9 +137,21 @@ export const startConsultation = async (req: Request, res: Response): Promise<vo
       consultation.prescription.medications = JSON.parse(consultation.prescription.medications as any);
     }
 
+    // Determine warning level based on available minutes
+    let warningLevel: 'none' | 'low' | 'critical' = 'none';
+    if (availableMinutes <= 50) {
+      warningLevel = 'critical';
+    } else if (availableMinutes <= 100) {
+      warningLevel = 'low';
+    }
+
     res.status(200).json({
       success: true,
-      data: { consultation },
+      data: {
+        consultation,
+        availableMinutes,
+        warningLevel,
+      },
     });
   } catch (error: any) {
     console.error('Start consultation error:', error);
@@ -169,7 +231,7 @@ export const getPatientConsultation = async (req: Request, res: Response): Promi
     // Find patient by token
     const patient = await prisma.patient.findUnique({
       where: { accessToken: patientToken },
-      select: { id: true, doctorId: true },
+      select: { id: true, doctorId: true, status: true, fullName: true },
     });
 
     if (!patient) {
@@ -238,7 +300,15 @@ export const getPatientConsultation = async (req: Request, res: Response): Promi
 
     res.status(200).json({
       success: true,
-      data: { consultation },
+      data: {
+        consultation: {
+          ...consultation,
+          patient: {
+            status: patient.status,
+            fullName: patient.fullName,
+          }
+        }
+      },
     });
   } catch (error: any) {
     console.error('Get patient consultation error:', error);
@@ -250,11 +320,141 @@ export const getPatientConsultation = async (req: Request, res: Response): Promi
   }
 };
 
-// End consultation
+// Update consultation duration in real-time (called every 30 seconds from frontend)
+// NOTE: This is for reference only - billing is based on video duration
+export const updateConsultationDuration = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { consultationId } = req.params;
+    const { duration } = req.body; // Duration in seconds
+
+    if (!duration || typeof duration !== 'number') {
+      res.status(400).json({
+        success: false,
+        message: 'Duration (in seconds) is required',
+      });
+      return;
+    }
+
+    const consultation = await prisma.consultation.findUnique({
+      where: { id: consultationId },
+    });
+
+    if (!consultation) {
+      res.status(404).json({
+        success: false,
+        message: 'Consultation not found',
+      });
+      return;
+    }
+
+    // Update total consultation duration (for reference only)
+    await prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        duration,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        duration,
+      },
+    });
+  } catch (error: any) {
+    console.error('Update consultation duration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating consultation duration',
+      error: error.message,
+    });
+  }
+};
+
+// Update video call duration in real-time (ONLY video time counts toward billing)
+export const updateVideoDuration = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { consultationId } = req.params;
+    const { videoDuration } = req.body; // Video duration in seconds
+
+    if (videoDuration === undefined || typeof videoDuration !== 'number') {
+      res.status(400).json({
+        success: false,
+        message: 'Video duration (in seconds) is required',
+      });
+      return;
+    }
+
+    const consultation = await prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: {
+        doctor: {
+          select: {
+            id: true,
+            monthlyVideoMinutes: true,
+            purchasedMinutes: true,
+            totalMinutesUsed: true,
+          },
+        },
+      },
+    });
+
+    if (!consultation) {
+      res.status(404).json({
+        success: false,
+        message: 'Consultation not found',
+      });
+      return;
+    }
+
+    // Calculate available minutes
+    const availableMinutes =
+      (consultation.doctor.monthlyVideoMinutes + consultation.doctor.purchasedMinutes) -
+      consultation.doctor.totalMinutesUsed;
+
+    const currentVideoMinutes = Math.ceil(videoDuration / 60);
+
+    // Check if in overtime
+    const inOvertime = currentVideoMinutes > availableMinutes;
+    const overtimeMinutes = inOvertime ? currentVideoMinutes - availableMinutes : 0;
+
+    // Update video duration and overtime status
+    await prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        videoDuration,
+        wentOvertime: inOvertime,
+        overtimeMinutes,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        videoDuration,
+        currentVideoMinutes,
+        availableMinutes,
+        inOvertime,
+        overtimeMinutes,
+      },
+    });
+  } catch (error: any) {
+    console.error('Update video duration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating video duration',
+      error: error.message,
+    });
+  }
+};
+
+// End consultation and update doctor's total minutes used
+// IMPORTANT: Only VIDEO duration counts toward billing
 export const endConsultation = async (req: Request, res: Response): Promise<void> => {
   try {
     const doctorId = (req as any).user.id;
     const { consultationId } = req.params;
+    const { duration, videoDuration } = req.body; // Total duration and video duration in seconds
 
     const consultation = await prisma.consultation.findFirst({
       where: {
@@ -271,18 +471,43 @@ export const endConsultation = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // Calculate video minutes used (ONLY video time counts toward billing)
+    // Use provided videoDuration or fall back to stored videoDuration
+    const finalVideoDuration = videoDuration ?? consultation.videoDuration ?? 0;
+    const videoMinutesUsed = Math.ceil(finalVideoDuration / 60);
+
+    // Update consultation status and durations
     const updatedConsultation = await prisma.consultation.update({
       where: { id: consultationId },
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
+        duration: duration || consultation.duration || 0, // Total time (for reference)
+        videoDuration: finalVideoDuration, // Video time (for billing)
       },
     });
+
+    // Update doctor's total minutes used (ONLY video minutes)
+    if (videoMinutesUsed > 0) {
+      await prisma.doctor.update({
+        where: { id: doctorId },
+        data: {
+          totalMinutesUsed: {
+            increment: videoMinutesUsed,
+          },
+        },
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: 'Consultation ended successfully',
-      data: { consultation: updatedConsultation },
+      data: {
+        consultation: updatedConsultation,
+        minutesUsed: videoMinutesUsed, // Video minutes only
+        totalDuration: updatedConsultation.duration,
+        videoDuration: finalVideoDuration,
+      },
     });
   } catch (error: any) {
     console.error('End consultation error:', error);
@@ -312,6 +537,17 @@ export const saveChatMessage = async (req: Request, res: Response): Promise<void
         consultationId,
         senderType,
         message,
+        isRead: false, // Default to unread
+      },
+    });
+
+    // Update consultation last message tracking
+    await prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        lastMessageAt: new Date(),
+        lastMessageSender: senderType,
+        hasUnreadMessages: senderType === 'patient', // Set true if patient sent message
       },
     });
 
@@ -414,7 +650,14 @@ export const generateVideoTokens = async (req: Request, res: Response): Promise<
         status: true,
         agoraChannelName: true,
         agoraDoctorToken: true,
-        agoraPatientToken: true
+        agoraPatientToken: true,
+        patient: {
+          select: {
+            status: true,
+            fullName: true,
+            videoCallEnabled: true,
+          },
+        },
       },
     });
 
@@ -422,6 +665,24 @@ export const generateVideoTokens = async (req: Request, res: Response): Promise<
       res.status(404).json({
         success: false,
         message: 'Consultation not found',
+      });
+      return;
+    }
+
+    // Block waitlisted patients from video calls
+    if (consultation.patient.status === 'WAITLISTED') {
+      res.status(403).json({
+        success: false,
+        message: `Video call not available. ${consultation.patient.fullName} is on the waiting list. Please activate them first.`,
+      });
+      return;
+    }
+
+    // Check if video is enabled for this patient
+    if (!consultation.patient.videoCallEnabled) {
+      res.status(403).json({
+        success: false,
+        message: 'Video call is not enabled for this patient.',
       });
       return;
     }
@@ -479,6 +740,129 @@ export const generateVideoTokens = async (req: Request, res: Response): Promise<
     res.status(500).json({
       success: false,
       message: 'Error generating video tokens',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Mark messages as read for a consultation
+ * PUT /api/consultations/:consultationId/mark-read
+ * Doctor only (marks patient messages as read)
+ */
+export const markMessagesAsRead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { consultationId } = req.params;
+    const doctorId = (req as any).user.id;
+
+    // Verify consultation belongs to doctor
+    const consultation = await prisma.consultation.findFirst({
+      where: {
+        id: consultationId,
+        doctor: { id: doctorId },
+      },
+    });
+
+    if (!consultation) {
+      res.status(404).json({
+        success: false,
+        message: 'Consultation not found',
+      });
+      return;
+    }
+
+    // Mark all patient messages as read
+    await prisma.chatMessage.updateMany({
+      where: {
+        consultationId,
+        senderType: 'patient',
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    // Update consultation unread flag
+    await prisma.consultation.update({
+      where: { id: consultationId },
+      data: { hasUnreadMessages: false },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Messages marked as read',
+    });
+  } catch (error: any) {
+    console.error('Mark messages read error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error marking messages as read',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Get consultations with unread messages for doctor
+ * GET /api/consultations/unread
+ * Doctor only
+ */
+export const getUnreadConsultations = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+
+    const consultations = await prisma.consultation.findMany({
+      where: {
+        doctor: { id: doctorId },
+        hasUnreadMessages: true,
+        status: 'ACTIVE',  // Only active consultations
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            fullName: true,
+            status: true,
+          },
+        },
+        chatMessages: {
+          where: {
+            senderType: 'patient',
+            isRead: false,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,  // Get last unread message
+          select: {
+            id: true,
+            message: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { lastMessageAt: 'desc' },
+    });
+
+    const unreadChats = consultations.map(consultation => ({
+      consultationId: consultation.id,
+      patient: consultation.patient,
+      lastMessage: consultation.chatMessages[0],
+      unreadCount: consultation.chatMessages.length,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        unreadChats,
+        totalUnread: unreadChats.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get unread consultations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching unread consultations',
       error: error.message,
     });
   }

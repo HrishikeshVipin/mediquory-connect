@@ -4,14 +4,20 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '../../../store/authStore';
-import { authApi } from '../../../lib/api';
-import type { Doctor } from '../../../types';
+import { authApi, subscriptionApi, consultationApi } from '../../../lib/api';
+import { connectSocket } from '../../../lib/socket';
+import { NotificationProvider } from '../../../context/NotificationContext';
+import NotificationBell from '../../../components/NotificationBell';
+import type { Doctor, SubscriptionInfo } from '../../../types';
 
 export default function DoctorDashboard() {
   const router = useRouter();
   const { isAuthenticated, role, user, clearAuth, initAuth } = useAuthStore();
   const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unreadChats, setUnreadChats] = useState<any[]>([]);
+  const [totalUnread, setTotalUnread] = useState(0);
 
   useEffect(() => {
     initAuth();
@@ -27,10 +33,57 @@ export default function DoctorDashboard() {
     if (isAuthenticated && role === 'DOCTOR' && user) {
       setDoctor(user as Doctor);
       setLoading(false);
+
+      // Fetch subscription info
+      subscriptionApi.getMySubscription()
+        .then((response) => {
+          if (response.success && response.data) {
+            setSubscriptionInfo(response.data);
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching subscription info:', error);
+        });
     } else {
       setLoading(false);
     }
   }, [isAuthenticated, role, user]);
+
+  // Fetch unread chats and set up real-time updates
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'DOCTOR' || !user?.id) return;
+
+    const fetchUnreadChats = async () => {
+      try {
+        const response = await consultationApi.getUnreadConsultations();
+        if (response.success) {
+          setUnreadChats(response.data.unreadChats);
+          setTotalUnread(response.data.totalUnread);
+        }
+      } catch (error) {
+        console.error('Error fetching unread chats:', error);
+      }
+    };
+
+    fetchUnreadChats();
+
+    // Connect to socket for real-time updates
+    const socket = connectSocket();
+
+    // Join doctor's personal room for notifications
+    socket.emit('join-doctor-room', { doctorId: user.id });
+
+    // Listen for new unread messages
+    socket.on('new-unread-message', (data: any) => {
+      console.log('New unread message notification:', data);
+      // Refresh unread chats
+      fetchUnreadChats();
+    });
+
+    return () => {
+      socket.off('new-unread-message');
+    };
+  }, [isAuthenticated, role, user?.id]);
 
   const handleLogout = async () => {
     try {
@@ -45,7 +98,7 @@ export default function DoctorDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-teal-50">
         <div className="text-lg">Loading...</div>
       </div>
     );
@@ -70,261 +123,344 @@ export default function DoctorDashboard() {
     }
   };
 
-  const getStatusMessage = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return 'Your account is verified and active';
-      case 'PENDING_VERIFICATION':
-        return 'Your account is under review. You will be notified once verified.';
-      case 'REJECTED':
-        return doctor.rejectionReason || 'Your application was rejected';
-      case 'SUSPENDED':
-        return 'Your account has been suspended';
-      default:
-        return status;
-    }
-  };
-
   const trialDaysLeft = Math.ceil(
     (new Date(doctor.trialEndsAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   );
 
+  const getWarningBannerConfig = () => {
+    if (!subscriptionInfo) return null;
+
+    const { warningLevel, message } = subscriptionInfo.status;
+
+    switch (warningLevel) {
+      case 'critical':
+        return {
+          color: 'bg-red-100 border-red-300 text-red-800',
+          icon: '🚨',
+          title: 'Critical: Very Low Minutes',
+          message: message || 'You have very few video minutes remaining. Please purchase more minutes to avoid interruption.'
+        };
+      case 'low':
+        return {
+          color: 'bg-orange-100 border-orange-300 text-orange-800',
+          icon: '⚠️',
+          title: 'Low Video Minutes',
+          message: message || 'Your video minutes are running low. Consider purchasing more minutes.'
+        };
+      case 'expired':
+        return {
+          color: 'bg-red-100 border-red-300 text-red-800',
+          icon: '❌',
+          title: 'Subscription Expired',
+          message: message || 'Your subscription has expired. Please renew to continue using the platform.'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const warningConfig = getWarningBannerConfig();
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Modern Header */}
-      <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-6">
+    <NotificationProvider>
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-teal-50">
+        {/* Compact Header */}
+        <header className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-bold text-gradient">Bhishak</h1>
-                <p className="text-sm text-slate-500">Doctor Portal</p>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent">BHISHAK MED</h1>
+                <p className="text-xs text-navy-600">Doctor Portal</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <NotificationBell />
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-navy-900">Dr. {doctor.fullName}</p>
+                  <p className="text-xs text-navy-600">{doctor.specialization}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-navy-100 hover:bg-navy-200 text-navy-800 rounded-lg font-medium text-sm transition-all"
+                >
+                  Logout
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-slate-900">Dr. {doctor.fullName}</p>
-                <p className="text-xs text-slate-500">{doctor.specialization}</p>
+          </div>
+        </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Status Banner */}
+        <div className={`rounded-lg px-4 py-3 mb-4 ${getStatusColor(doctor.status)}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">
+              {doctor.status === 'VERIFIED' && '✓'}
+              {doctor.status === 'PENDING_VERIFICATION' && '⏳'}
+              {doctor.status === 'REJECTED' && '✗'}
+              {doctor.status === 'SUSPENDED' && '⚠'}
+            </span>
+            <div>
+              <p className="font-semibold text-sm">Account Status: {doctor.status.replace(/_/g, ' ')}</p>
+              {doctor.status === 'PENDING_VERIFICATION' && (
+                <p className="text-xs mt-0.5">Your account is under review</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Subscription Warning Banner */}
+        {warningConfig && (
+          <div className={`rounded-lg px-4 py-3 mb-6 border ${warningConfig.color}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{warningConfig.icon}</span>
+                <div>
+                  <p className="font-semibold text-sm">{warningConfig.title}</p>
+                  <p className="text-xs mt-0.5">{warningConfig.message}</p>
+                </div>
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-all"
+              <Link
+                href="/doctor/subscription"
+                className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-900 rounded-lg font-medium text-sm transition-all border border-gray-300"
               >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back, Dr. {doctor.fullName}</h2>
-          <p className="text-slate-600">Here's what's happening with your practice today</p>
-        </div>
-
-        {/* Verification Status */}
-        <div className="mb-6">
-          <div className={`rounded-xl p-5 ${getStatusColor(doctor.status)}`}>
-            <div className="flex items-center gap-3">
-              <div className="text-3xl">
-                {doctor.status === 'VERIFIED' && '✓'}
-                {doctor.status === 'PENDING_VERIFICATION' && '⏳'}
-                {doctor.status === 'REJECTED' && '✗'}
-                {doctor.status === 'SUSPENDED' && '⚠'}
-              </div>
-              <div>
-                <h2 className="text-base font-bold mb-1">Account Status</h2>
-                <p className="text-sm opacity-90">{getStatusMessage(doctor.status)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Cards - Modern Grid */}
-        {doctor.status === 'VERIFIED' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white border border-cyan-100 rounded-2xl p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase">Subscription</h3>
-                  <p className="text-2xl font-bold text-slate-900">{doctor.subscriptionStatus}</p>
-                </div>
-              </div>
-              {doctor.subscriptionStatus === 'TRIAL' && (
-                <p className="text-sm text-cyan-600 font-medium">
-                  {trialDaysLeft > 0 ? `${trialDaysLeft} days remaining` : 'Trial expired'}
-                </p>
-              )}
-            </div>
-
-            <div className="bg-white border border-emerald-100 rounded-2xl p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase">Patients</h3>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {doctor.patientsCreated} / {doctor.subscriptionStatus === 'TRIAL' ? '2' : '∞'}
-                  </p>
-                </div>
-              </div>
-              {doctor.subscriptionStatus === 'TRIAL' && (
-                <p className="text-sm text-emerald-600 font-medium">Trial limit</p>
-              )}
-            </div>
-
-            <div className="bg-white border border-amber-100 rounded-2xl p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase">Specialization</h3>
-                  <p className="text-xl font-bold text-slate-900">{doctor.specialization}</p>
-                </div>
-              </div>
+                Manage Subscription
+              </Link>
             </div>
           </div>
         )}
 
-        {/* Profile Information */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8">
-          <h2 className="text-xl font-bold text-slate-900 mb-6">Profile Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Full Name</p>
-              <p className="text-base font-semibold text-slate-900">{doctor.fullName}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Email</p>
-              <p className="text-base font-semibold text-slate-900">{doctor.email}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Phone</p>
-              <p className="text-base font-semibold text-slate-900">{doctor.phone}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Specialization</p>
-              <p className="text-base font-semibold text-slate-900">{doctor.specialization}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Registration Type</p>
-              <p className="text-base font-semibold text-slate-900">
-                {doctor.registrationType === 'STATE_MEDICAL_COUNCIL'
-                  ? `State Medical Council${doctor.registrationState ? ` (${doctor.registrationState})` : ''}`
-                  : 'National Medical Commission'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Registration Number</p>
-              <p className="text-base font-semibold text-slate-900">{doctor.registrationNo}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        {doctor.status === 'VERIFIED' && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link
-                href="/doctor/patients/new"
-                className="bg-white border-2 border-cyan-200 rounded-xl p-6 hover:border-cyan-400 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        {/* Main Grid - Side by Side */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Left Column - Stats */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Stats Row */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Subscription Tier */}
+              <div className="bg-white rounded-lg shadow border border-gray-100 p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Create Patient</h3>
+                  <div>
+                    <p className="text-xs text-gray-600">Subscription</p>
+                    <p className="text-lg font-bold text-navy-900">
+                      {subscriptionInfo?.subscription.tier || doctor.subscriptionTier}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-slate-600">
-                  Add a new patient to your practice
-                </p>
-              </Link>
+                {doctor.subscriptionStatus === 'TRIAL' && trialDaysLeft > 0 && (
+                  <p className="text-xs text-primary-600">{trialDaysLeft} days left</p>
+                )}
+              </div>
 
-              <Link
-                href="/doctor/patients"
-                className="bg-white border-2 border-emerald-200 rounded-xl p-6 hover:border-emerald-400 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* Patients */}
+              <div className="bg-white rounded-lg shadow border border-gray-100 p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">View Patients</h3>
+                  <div>
+                    <p className="text-xs text-gray-600">Patients</p>
+                    <p className="text-lg font-bold text-navy-900">
+                      {subscriptionInfo?.usage.patients.used || doctor.patientsCreated} / {subscriptionInfo?.usage.patients.unlimited ? '∞' : (subscriptionInfo?.usage.patients.limit || doctor.patientLimit)}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-slate-600">
-                  Manage your patient list
-                </p>
-              </Link>
+                {subscriptionInfo && !subscriptionInfo.status.canCreatePatients && (
+                  <p className="text-xs text-red-600">Limit reached</p>
+                )}
+              </div>
 
-              <button
-                onClick={() => alert('Subscription Management - Coming in Phase 9!\n\nFeatures:\n- View subscription details\n- Upgrade from trial\n- Razorpay payment integration\n- Unlimited patients after subscription')}
-                className="bg-white border-2 border-amber-200 rounded-xl p-6 hover:border-amber-400 hover:shadow-md transition-all text-left"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              {/* Video Minutes */}
+              <div className="bg-white rounded-lg shadow border border-gray-100 p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Subscription</h3>
+                  <div>
+                    <p className="text-xs text-gray-600">Available Minutes</p>
+                    <p className={`text-lg font-bold ${subscriptionInfo?.status.warningLevel === 'critical' ? 'text-red-600' : subscriptionInfo?.status.warningLevel === 'low' ? 'text-orange-600' : 'text-navy-900'}`}>
+                      {subscriptionInfo?.usage.videoMinutes.available || 0}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-slate-600">
-                  Manage your subscription
+                {subscriptionInfo && (
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                    <div
+                      className={`h-1.5 rounded-full ${subscriptionInfo.status.warningLevel === 'critical' ? 'bg-red-500' : subscriptionInfo.status.warningLevel === 'low' ? 'bg-orange-500' : 'bg-green-500'}`}
+                      style={{
+                        width: `${Math.min(100, (subscriptionInfo.usage.videoMinutes.available / (subscriptionInfo.usage.videoMinutes.subscription + subscriptionInfo.usage.videoMinutes.purchased)) * 100)}%`
+                      }}
+                    ></div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Unread Chats Card */}
+            {doctor.status === 'VERIFIED' && (
+              <div className="bg-white rounded-lg shadow border border-gray-100 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-navy-900">
+                    💬 Unread Chats {totalUnread > 0 && (
+                      <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-600 text-white">
+                        {totalUnread}
+                      </span>
+                    )}
+                  </h3>
+                  <Link
+                    href="/doctor/patients"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    View All Patients →
+                  </Link>
+                </div>
+
+                {unreadChats.length === 0 ? (
+                  <p className="text-gray-500 text-center py-6">
+                    No unread messages
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {unreadChats.map((chat) => (
+                      <Link
+                        key={chat.consultationId}
+                        href={`/doctor/patients/${chat.patient.id}/consult`}
+                        className="block p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-gray-900">
+                                {chat.patient.fullName}
+                              </h4>
+                              {chat.patient.status === 'WAITLISTED' && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+                                  Waitlisted
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600 truncate">
+                              {chat.lastMessage?.message || 'New message'}
+                            </p>
+                          </div>
+                          <div className="text-right ml-4">
+                            <p className="text-xs text-gray-500">
+                              {chat.lastMessage?.createdAt && new Date(chat.lastMessage.createdAt).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                            {chat.unreadCount > 1 && (
+                              <span className="inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-600 text-white">
+                                {chat.unreadCount} new
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            {doctor.status === 'VERIFIED' && (
+              <div className="bg-white rounded-lg shadow border border-gray-100 p-5">
+                <h3 className="text-lg font-bold text-navy-900 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    href="/doctor/patients/new"
+                    className="flex items-center gap-3 p-4 bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg hover:shadow-md transition-all border border-teal-200"
+                  >
+                    <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-navy-900 text-sm">Create Patient</p>
+                      <p className="text-xs text-navy-600">Add new patient</p>
+                    </div>
+                  </Link>
+
+                  <Link
+                    href="/doctor/patients"
+                    className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg hover:shadow-md transition-all border border-primary-200"
+                  >
+                    <div className="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-navy-900 text-sm">View Patients</p>
+                      <p className="text-xs text-navy-600">Manage patients</p>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Profile Info */}
+          <div className="bg-white rounded-lg shadow border border-gray-100 p-5">
+            <h3 className="text-lg font-bold text-navy-900 mb-4">Profile Information</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-600">Full Name</p>
+                <p className="text-sm font-semibold text-navy-900">{doctor.fullName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Email</p>
+                <p className="text-sm font-semibold text-navy-900">{doctor.email}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Phone</p>
+                <p className="text-sm font-semibold text-navy-900">{doctor.phone}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Specialization</p>
+                <p className="text-sm font-semibold text-navy-900">{doctor.specialization}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Registration Type</p>
+                <p className="text-sm font-semibold text-navy-900">
+                  {doctor.registrationType === 'STATE_MEDICAL_COUNCIL'
+                    ? `State Council${doctor.registrationState ? ` (${doctor.registrationState})` : ''}`
+                    : 'National Commission'}
                 </p>
-              </button>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Pending Verification Message */}
+        {/* Pending/Rejected Messages */}
         {doctor.status === 'PENDING_VERIFICATION' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-3">What's Next?</h3>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span className="text-slate-700">Our admin team is reviewing your application and documents</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span className="text-slate-700">You will receive an email notification once verification is complete</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span className="text-slate-700">This process typically takes 1-2 business days</span>
-              </li>
-            </ul>
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-5">
+            <h3 className="text-sm font-bold text-navy-900 mb-2">Verification in Progress</h3>
+            <p className="text-sm text-navy-700">Your application is under review. You'll be notified via email once verified (typically 1-2 business days).</p>
           </div>
         )}
 
-        {/* Rejected Message */}
         {doctor.status === 'REJECTED' && doctor.rejectionReason && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-3">Rejection Reason</h3>
-            <p className="text-slate-700 mb-4">{doctor.rejectionReason}</p>
-            <p className="text-sm text-slate-600">
-              Please contact our support team if you believe this was an error or need clarification.
-            </p>
+          <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-5">
+            <h3 className="text-sm font-bold text-navy-900 mb-2">Application Rejected</h3>
+            <p className="text-sm text-navy-700 mb-2">{doctor.rejectionReason}</p>
+            <p className="text-xs text-navy-600">Please contact support if you need clarification.</p>
           </div>
         )}
       </main>
-    </div>
+      </div>
+    </NotificationProvider>
   );
 }

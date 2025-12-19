@@ -13,7 +13,13 @@ import consultationRoutes from './routes/consultation.routes';
 import vitalsRoutes from './routes/vitals.routes';
 import prescriptionRoutes from './routes/prescription.routes';
 import paymentRoutes from './routes/payment.routes';
+import subscriptionRoutes from './routes/subscription.routes';
+import reviewRoutes from './routes/review.routes';
+import medicineRoutes from './routes/medicine.routes';
+import notificationRoutes from './routes/notification.routes';
 import { initializeChatSocket } from './socket/chat.socket';
+import { notificationService } from './services/notification.service';
+import { apiLimiter } from './middleware/rateLimiter';
 
 // Load environment variables
 dotenv.config();
@@ -22,8 +28,16 @@ dotenv.config();
 const app: Application = express();
 const httpServer = createServer(app);
 
-// CORS configuration - allow multiple origins
-const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+// CORS configuration - allow multiple origins (including network access)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://172.25.48.1:3000', // WSL network
+  'http://192.168.0.241:3000', // Actual WiFi network IP for mobile access
+  'http://192.168.0.1:3000', // Router IP range
+  'http://192.168.1.1:3000', // Alternative router range
+];
 
 // Initialize Socket.io
 const io = new SocketIOServer(httpServer, {
@@ -58,6 +72,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Apply general rate limiting to all API routes
+app.use('/api', apiLimiter);
+
 // Serve static files (uploads) with CORS headers
 app.use('/uploads', (req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -84,6 +101,10 @@ app.use('/api/consultations', consultationRoutes);
 app.use('/api', vitalsRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/medicines', medicineRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Test database connection
 app.get('/api/test-db', async (req: Request, res: Response) => {
@@ -114,6 +135,9 @@ app.get('/api/test-db', async (req: Request, res: Response) => {
 // Initialize Socket.io chat handler
 initializeChatSocket(io);
 
+// Initialize notification service with Socket.io
+notificationService.setSocketIO(io);
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
@@ -123,11 +147,14 @@ app.use((req: Request, res: Response) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = '0.0.0.0'; // Listen on all network interfaces
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, HOST, () => {
   console.log('🚀 Server started successfully!');
   console.log(`📡 API running on: http://localhost:${PORT}`);
+  console.log(`📱 Network access (WiFi): http://192.168.0.241:${PORT}`);
+  console.log(`📱 Network access (WSL): http://172.25.48.1:${PORT}`);
   console.log(`🔌 Socket.io ready on: http://localhost:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`💾 Database: ${process.env.DATABASE_URL ? 'Configured' : 'Not configured'}`);
