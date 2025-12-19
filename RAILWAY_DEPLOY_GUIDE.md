@@ -1,12 +1,21 @@
 # 🚀 Railway Deployment Guide - Bhishak Med
 
+## 🔐 CRITICAL SECURITY NOTICE
+
+**⚠️ NEVER USE EXAMPLE SECRETS FROM DOCUMENTATION!**
+
+This guide contains placeholder values like `REPLACE_WITH_YOUR_OWN`.
+You MUST generate your own unique secrets. Exposed secrets = compromised security.
+
+---
+
 ## Pre-Deployment Checklist
 
 ### 1. Prerequisites
 - [ ] Railway account created at [railway.app](https://railway.app)
 - [ ] GitHub repository with your code
-- [ ] Razorpay account (production keys)
-- [ ] Agora account (production credentials)
+- [ ] Razorpay account (production LIVE keys - not test)
+- [ ] Agora account (production credentials - NEW project)
 
 ---
 

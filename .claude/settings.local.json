@@ -52,7 +52,8 @@
       "Bash(npm run prisma:generate:*)",
       "Bash(kill:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nProduction-ready deployment: Complete telemedicine platform\n\nMajor Features & Improvements:\n✅ Fixed 403 authentication errors\n✅ Added admin subscription plan management \\(create/edit/activate\\)\n✅ Implemented waitlist system for patient limit management\n✅ Enhanced patient registration with unlimited self-registration\n✅ Added verified test doctor account for development\n✅ Fixed API interceptor to redirect doctors to correct login page\n✅ Updated database configuration for PostgreSQL \\(Railway\\)\n✅ Created comprehensive Railway deployment guides\n\nNew Features:\n- Admin panel for subscription plan CRUD operations\n- Patient waitlist system \\(unlimited registration, controlled activation\\)\n- Doctor can activate waitlisted patients within subscription limits\n- Improved authentication flow with proper role-based redirects\n- Enhanced subscription management UI\n\nTechnical Updates:\n- Migrated from SQLite to PostgreSQL for production\n- Added Railway deployment configuration \\(nixpacks.toml\\)\n- Created deployment guides \\(DEPLOY_NOW.md, RAILWAY_DEPLOY_GUIDE.md\\)\n- Updated Prisma schema for PostgreSQL\n- Added test accounts for development/testing\n- Security improvements and production configurations\n\nTest Accounts:\n- Admin: admin@bhishakmed.com / admin123\n- Doctor: doctor@test.com / doctor123\n\nReady for Railway deployment! See DEPLOY_NOW.md for quick setup.\nEOF\n\\)\")",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
