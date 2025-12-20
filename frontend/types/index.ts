@@ -75,7 +75,15 @@ export interface ApiResponse<T> {
 
 export interface PaginationData<T> {
   doctors?: T[];
-  pagination: {
+  patients?: T[];
+  stats?: {
+    total: number;
+    manual: number;
+    selfRegistered: number;
+    active: number;
+    waitlisted: number;
+  };
+  pagination?: {
     page: number;
     limit: number;
     total: number;
