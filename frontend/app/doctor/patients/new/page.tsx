@@ -45,7 +45,7 @@ export default function CreatePatientPage() {
 
       if (data.phone) patientData.phone = data.phone;
       if (typeof data.age === 'number') patientData.age = data.age;
-      if (data.gender && data.gender !== '') patientData.gender = data.gender;
+      if (data.gender) patientData.gender = data.gender;
 
       const response = await patientApi.createPatient(patientData);
 
