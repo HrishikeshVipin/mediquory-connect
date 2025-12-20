@@ -327,7 +327,7 @@ export const subscriptionApi = {
     const { data } = await api.post<ApiResponse<{
       subscription: any;
       razorpayOrder?: any;
-    }>>('/subscription/upgrade', { planTier });
+    }>>('/subscription/upgrade', { tier: planTier });
     return data;
   },
 

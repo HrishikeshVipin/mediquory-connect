@@ -66,7 +66,7 @@ export default function DoctorConsultationPage() {
       return;
     }
 
-    if (patientId) {
+    if (patientId && user) {
       startOrGetConsultation();
     }
 
@@ -80,7 +80,7 @@ export default function DoctorConsultationPage() {
         disconnectSocket();
       }
     };
-  }, [patientId, isAuthenticated, role]);
+  }, [patientId, isAuthenticated, role, user]);
 
   useEffect(() => {
     if (consultation && !joined && user) {

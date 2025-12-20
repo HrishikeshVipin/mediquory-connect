@@ -71,7 +71,12 @@ export default function DoctorSignupPage() {
 
   const registrationType = watch('registrationType');
 
-  const nextStep = async () => {
+  const nextStep = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) {
+      e.preventDefault(); // Prevent any default behavior
+      e.stopPropagation(); // Stop event bubbling
+    }
+
     setError(''); // Clear any previous errors
     let fieldsToValidate: any[] = [];
 
@@ -102,6 +107,7 @@ export default function DoctorSignupPage() {
     const isValid = await trigger(fieldsToValidate as any);
     if (isValid) {
       setCurrentStep(currentStep + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top of new step
     } else {
       setError('Please fix the validation errors before proceeding');
     }
@@ -226,7 +232,15 @@ export default function DoctorSignupPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)}>
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            onKeyDown={(e) => {
+              // Prevent Enter key from submitting form except on step 5
+              if (e.key === 'Enter' && currentStep < 5) {
+                e.preventDefault();
+              }
+            }}
+          >
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
               <div className="space-y-4">
