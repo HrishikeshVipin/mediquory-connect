@@ -39,6 +39,11 @@ const allowedOrigins = [
   'http://192.168.1.1:3000', // Alternative router range
 ];
 
+// Add production frontend URL if set
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 // Initialize Socket.io
 const io = new SocketIOServer(httpServer, {
   cors: {
