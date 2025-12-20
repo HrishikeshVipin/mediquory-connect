@@ -25,6 +25,7 @@ export interface Doctor {
   subscriptionTier: SubscriptionTier;
   trialEndsAt: string;
   subscriptionEndsAt?: string;
+  razorpaySubscriptionId?: string;
   patientsCreated: number;
   patientLimit: number;
   monthlyVideoMinutes: number;
