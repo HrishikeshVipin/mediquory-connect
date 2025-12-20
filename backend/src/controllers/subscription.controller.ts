@@ -10,6 +10,37 @@ const razorpay = new Razorpay({
 });
 
 /**
+ * Test Razorpay configuration
+ */
+export const testRazorpayConfig = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const keyId = process.env.RAZORPAY_KEY_ID || 'NOT_SET';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || 'NOT_SET';
+
+    const config = {
+      keyIdSet: keyId !== 'NOT_SET' && keyId !== 'rzp_test_SAMPLE_KEY',
+      keySecretSet: keySecret !== 'NOT_SET' && keySecret !== 'SAMPLE_SECRET',
+      keyIdPrefix: keyId.substring(0, 8),
+      isTestMode: keyId.startsWith('rzp_test_'),
+      isLiveMode: keyId.startsWith('rzp_live_'),
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Razorpay configuration check',
+      data: { config }
+    });
+  } catch (error: any) {
+    console.error('Test Razorpay config error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error testing Razorpay config',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Get all available subscription plans
  */
 export const getSubscriptionPlans = async (req: Request, res: Response): Promise<void> => {
@@ -156,6 +187,8 @@ export const upgradeSubscription = async (req: Request, res: Response): Promise<
     const doctorId = (req as any).user.id;
     const { tier } = req.body;
 
+    console.log('🔄 Upgrade subscription request:', { doctorId, tier });
+
     // Validate tier
     const validTiers = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE'];
     if (!validTiers.includes(tier)) {
@@ -179,6 +212,22 @@ export const upgradeSubscription = async (req: Request, res: Response): Promise<
       return;
     }
 
+    console.log('📋 Plan found:', { tier: plan.tier, price: plan.price });
+
+    // Check Razorpay configuration
+    const keyId = process.env.RAZORPAY_KEY_ID || 'NOT_SET';
+    if (keyId === 'NOT_SET' || keyId === 'rzp_test_SAMPLE_KEY') {
+      console.error('❌ Razorpay not configured properly');
+      res.status(500).json({
+        success: false,
+        message: 'Payment gateway not configured. Please contact support.',
+        error: 'RAZORPAY_NOT_CONFIGURED'
+      });
+      return;
+    }
+
+    console.log('💳 Creating Razorpay order...');
+
     // Create Razorpay order
     const razorpayOrder = await razorpay.orders.create({
       amount: plan.price, // amount in paise
@@ -191,6 +240,8 @@ export const upgradeSubscription = async (req: Request, res: Response): Promise<
         type: 'subscription_upgrade',
       },
     });
+
+    console.log('✅ Razorpay order created:', razorpayOrder.id);
 
     res.status(200).json({
       success: true,
@@ -205,11 +256,18 @@ export const upgradeSubscription = async (req: Request, res: Response): Promise<
       },
     });
   } catch (error: any) {
-    console.error('Upgrade subscription error:', error);
+    console.error('❌ Upgrade subscription error:', {
+      message: error.message,
+      description: error.error?.description,
+      code: error.error?.code,
+      statusCode: error.statusCode,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
-      message: 'Error upgrading subscription',
-      error: error.message
+      message: 'Error upgrading subscription. Please check Razorpay configuration.',
+      error: error.message,
+      details: error.error?.description || 'Razorpay API error'
     });
   }
 };

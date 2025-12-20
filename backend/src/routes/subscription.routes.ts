@@ -8,10 +8,18 @@ import {
   confirmMinutePurchase,
   confirmSubscriptionUpgrade,
   handleRazorpayWebhook,
+  testRazorpayConfig,
 } from '../controllers/subscription.controller';
 import { auth } from '../middleware/auth';
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/subscription/test-razorpay
+ * @desc    Test Razorpay configuration
+ * @access  Public (for debugging)
+ */
+router.get('/test-razorpay', testRazorpayConfig);
 
 /**
  * @route   GET /api/subscription/plans
