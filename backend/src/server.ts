@@ -68,6 +68,9 @@ const io = new SocketIOServer(httpServer, {
   pingInterval: 25000,
 });
 
+// Trust Railway proxy for rate limiting
+app.set('trust proxy', true);
+
 // Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },

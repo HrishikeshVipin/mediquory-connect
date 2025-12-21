@@ -190,24 +190,23 @@ export default function DoctorDashboard() {
 
   return (
     <NotificationProvider>
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-teal-50">
-        {/* Compact Header */}
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-teal-50 pb-20">
+        {/* Mobile-Optimized Header */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3">
             <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent">BHISHAK MED</h1>
-                <p className="text-xs text-navy-600">Doctor Portal</p>
-              </div>
               <div className="flex items-center gap-3">
+                <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent">BHISHAK MED</h1>
                 <NotificationBell />
-                <div className="text-right">
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-right hidden sm:block">
                   <p className="text-sm font-semibold text-navy-900">Dr. {doctor.fullName}</p>
                   <p className="text-xs text-navy-600">{doctor.specialization}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 bg-navy-100 hover:bg-navy-200 text-navy-800 rounded-lg font-medium text-sm transition-all"
+                  className="px-3 py-2 sm:px-4 bg-navy-100 hover:bg-navy-200 text-navy-800 rounded-lg font-medium text-sm transition-all"
                 >
                   Logout
                 </button>
@@ -216,18 +215,18 @@ export default function DoctorDashboard() {
           </div>
         </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4">
         {/* Status Banner */}
-        <div className={`rounded-lg px-4 py-3 mb-4 ${getStatusColor(doctor.status)}`}>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">
+        <div className={`rounded-lg px-3 py-3 mb-3 ${getStatusColor(doctor.status)}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-xl sm:text-2xl">
               {doctor.status === 'VERIFIED' && '✓'}
               {doctor.status === 'PENDING_VERIFICATION' && '⏳'}
               {doctor.status === 'REJECTED' && '✗'}
               {doctor.status === 'SUSPENDED' && '⚠'}
             </span>
             <div>
-              <p className="font-semibold text-sm">Account Status: {doctor.status.replace(/_/g, ' ')}</p>
+              <p className="font-semibold text-xs sm:text-sm">Account Status: {doctor.status.replace(/_/g, ' ')}</p>
               {doctor.status === 'PENDING_VERIFICATION' && (
                 <p className="text-xs mt-0.5">Your account is under review</p>
               )}
@@ -237,40 +236,40 @@ export default function DoctorDashboard() {
 
         {/* Subscription Warning Banner */}
         {warningConfig && (
-          <div className={`rounded-lg px-4 py-3 mb-6 border ${warningConfig.color}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{warningConfig.icon}</span>
-                <div>
-                  <p className="font-semibold text-sm">{warningConfig.title}</p>
+          <div className={`rounded-lg px-3 py-3 mb-4 border ${warningConfig.color}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl sm:text-2xl">{warningConfig.icon}</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-xs sm:text-sm">{warningConfig.title}</p>
                   <p className="text-xs mt-0.5">{warningConfig.message}</p>
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={fetchSubscriptionInfo}
-                  className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-lg font-medium text-sm transition-all"
+                  className="flex-1 sm:flex-none px-3 py-2 bg-blue-100 hover:bg-blue-200 active:bg-blue-300 text-blue-900 rounded-lg font-medium text-sm transition-all"
                   title="Refresh subscription data"
                 >
                   🔄 Refresh
                 </button>
                 <Link
                   href="/doctor/subscription"
-                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-900 rounded-lg font-medium text-sm transition-all border border-gray-300"
+                  className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-900 rounded-lg font-medium text-sm transition-all border border-gray-300 text-center"
                 >
-                  Manage Subscription
+                  Manage
                 </Link>
               </div>
             </div>
           </div>
         )}
 
-        {/* Main Grid - Side by Side */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        {/* Main Grid - Mobile First */}
+        <div className="grid lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Left Column - Stats */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Stats Row */}
-            <div className="grid grid-cols-3 gap-4">
+          <div className="lg:col-span-2 space-y-3 lg:space-y-4">
+            {/* Stats Row - Responsive Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4">
               {/* Subscription Tier */}
               <div className="bg-white rounded-lg shadow border border-gray-100 p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -506,6 +505,39 @@ export default function DoctorDashboard() {
           </div>
         )}
       </main>
+
+        {/* Mobile Bottom Navigation */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg lg:hidden z-50">
+          <div className="grid grid-cols-3 gap-1 px-2 py-2">
+            <Link
+              href="/doctor/patients/new"
+              className="flex flex-col items-center justify-center py-3 px-2 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-all"
+            >
+              <svg className="w-6 h-6 text-teal-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="text-xs font-medium text-gray-700">New Patient</span>
+            </Link>
+            <Link
+              href="/doctor/patients"
+              className="flex flex-col items-center justify-center py-3 px-2 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-all"
+            >
+              <svg className="w-6 h-6 text-blue-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <span className="text-xs font-medium text-gray-700">Patients</span>
+            </Link>
+            <Link
+              href="/doctor/subscription"
+              className="flex flex-col items-center justify-center py-3 px-2 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-all"
+            >
+              <svg className="w-6 h-6 text-purple-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs font-medium text-gray-700">Subscription</span>
+            </Link>
+          </div>
+        </nav>
       </div>
     </NotificationProvider>
   );
