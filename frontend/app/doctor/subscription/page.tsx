@@ -152,8 +152,11 @@ export default function SubscriptionPage() {
               );
 
               if (confirmResponse.success) {
-                alert(`Success! You've been upgraded to ${planName}.`);
-                loadSubscriptionData(); // Reload data
+                alert(`Success! You've been upgraded to ${planName}. Redirecting to dashboard...`);
+                // Small delay to let user see the message, then redirect to dashboard
+                setTimeout(() => {
+                  window.location.href = '/doctor/dashboard';
+                }, 1500);
               } else {
                 alert('Payment verification failed. Please contact support.');
               }

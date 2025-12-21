@@ -29,25 +29,52 @@ export default function DoctorDashboard() {
     }
   }, [isAuthenticated, role, loading, router]);
 
+  // Fetch subscription info
+  const fetchSubscriptionInfo = async () => {
+    try {
+      const response = await subscriptionApi.getMySubscription();
+      if (response.success && response.data) {
+        setSubscriptionInfo(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription info:', error);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated && role === 'DOCTOR' && user) {
       setDoctor(user as Doctor);
       setLoading(false);
-
-      // Fetch subscription info
-      subscriptionApi.getMySubscription()
-        .then((response) => {
-          if (response.success && response.data) {
-            setSubscriptionInfo(response.data);
-          }
-        })
-        .catch((error) => {
-          console.error('Error fetching subscription info:', error);
-        });
+      fetchSubscriptionInfo();
     } else {
       setLoading(false);
     }
   }, [isAuthenticated, role, user]);
+
+  // Refetch subscription info when page becomes visible or focused (after payment)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isAuthenticated && role === 'DOCTOR') {
+        console.log('🔄 Page visible - refreshing subscription data');
+        fetchSubscriptionInfo();
+      }
+    };
+
+    const handleFocus = () => {
+      if (isAuthenticated && role === 'DOCTOR') {
+        console.log('🔄 Window focused - refreshing subscription data');
+        fetchSubscriptionInfo();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isAuthenticated, role]);
 
   // Fetch unread chats and set up real-time updates
   useEffect(() => {
