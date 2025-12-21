@@ -246,12 +246,21 @@ export default function DoctorDashboard() {
                   <p className="text-xs mt-0.5">{warningConfig.message}</p>
                 </div>
               </div>
-              <Link
-                href="/doctor/subscription"
-                className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-900 rounded-lg font-medium text-sm transition-all border border-gray-300"
-              >
-                Manage Subscription
-              </Link>
+              <div className="flex gap-2">
+                <button
+                  onClick={fetchSubscriptionInfo}
+                  className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-lg font-medium text-sm transition-all"
+                  title="Refresh subscription data"
+                >
+                  🔄 Refresh
+                </button>
+                <Link
+                  href="/doctor/subscription"
+                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-900 rounded-lg font-medium text-sm transition-all border border-gray-300"
+                >
+                  Manage Subscription
+                </Link>
+              </div>
             </div>
           </div>
         )}
@@ -264,18 +273,27 @@ export default function DoctorDashboard() {
             <div className="grid grid-cols-3 gap-4">
               {/* Subscription Tier */}
               <div className="bg-white rounded-lg shadow border border-gray-100 p-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Subscription</p>
+                      <p className="text-lg font-bold text-navy-900">
+                        {subscriptionInfo?.subscription.tier || doctor.subscriptionTier}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Subscription</p>
-                    <p className="text-lg font-bold text-navy-900">
-                      {subscriptionInfo?.subscription.tier || doctor.subscriptionTier}
-                    </p>
-                  </div>
+                  <button
+                    onClick={fetchSubscriptionInfo}
+                    className="text-blue-600 hover:text-blue-800 text-xl transition-all"
+                    title="Refresh subscription data"
+                  >
+                    🔄
+                  </button>
                 </div>
                 {doctor.subscriptionStatus === 'TRIAL' && trialDaysLeft > 0 && (
                   <p className="text-xs text-primary-600">{trialDaysLeft} days left</p>
