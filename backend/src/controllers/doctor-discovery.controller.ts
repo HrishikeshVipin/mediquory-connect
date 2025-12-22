@@ -377,9 +377,6 @@ export const getSpecializations = async (req: Request, res: Response): Promise<v
     const doctors = await prisma.doctor.findMany({
       where: {
         status: 'VERIFIED',
-        specialization: {
-          not: null,
-        },
       },
       select: {
         specialization: true,

@@ -269,6 +269,15 @@ export const getPatientConsultation = async (req: Request, res: Response): Promi
 
     // Create new consultation if none exists
     if (!consultation) {
+      // Check if patient has a doctor (link-based patients)
+      if (!patient.doctorId) {
+        res.status(400).json({
+          success: false,
+          message: 'This patient account is not linked to a doctor. Please use the patient app to book a consultation.',
+        });
+        return;
+      }
+
       consultation = await prisma.consultation.create({
         data: {
           patientId: patient.id,
@@ -294,7 +303,7 @@ export const getPatientConsultation = async (req: Request, res: Response): Promi
     }
 
     // Parse medications JSON if prescription exists
-    if (consultation.prescription && consultation.prescription.medications) {
+    if (consultation?.prescription && consultation.prescription.medications) {
       consultation.prescription.medications = JSON.parse(consultation.prescription.medications as any);
     }
 
