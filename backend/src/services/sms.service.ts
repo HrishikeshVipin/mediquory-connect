@@ -78,13 +78,14 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; messag
         : `91${phone}`;
 
       try {
-        // Method 1: Using MSG91 SMS API (simple text message)
-        const smsResponse = await axios.post(
-          'https://control.msg91.com/api/v5/flow/',
+        // Method 1: Using MSG91 OTP Service API (recommended for OTP messages)
+        // This endpoint is optimized for OTP delivery with better success rates
+        const otpResponse = await axios.post(
+          'https://control.msg91.com/api/v5/otp',
           {
+            mobile: formattedPhone,
+            otp: otp,
             sender: MSG91_SENDER_ID,
-            mobiles: formattedPhone,
-            message: `Your Bhishak Med OTP is: ${otp}. Valid for 10 minutes. Do not share this code.`,
           },
           {
             headers: {
@@ -94,22 +95,27 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; messag
           }
         );
 
-        console.log('✅ MSG91 SMS sent:', smsResponse.data);
-      } catch (smsError: any) {
-        console.error('❌ MSG91 SMS Error:', smsError.response?.data || smsError.message);
+        console.log('✅ MSG91 OTP sent:', otpResponse.data);
+      } catch (otpError: any) {
+        console.error('❌ MSG91 OTP Error:', otpError.response?.data || otpError.message);
 
-        // Fallback: Try alternate MSG91 endpoint if first fails
+        // Fallback: Try alternate MSG91 SMS endpoint if OTP service fails
         try {
           await axios.post(
-            `https://api.msg91.com/api/v5/otp?authkey=${MSG91_AUTH_KEY}&mobile=${formattedPhone}&otp=${otp}`,
-            {},
+            'https://control.msg91.com/api/v5/flow/',
+            {
+              sender: MSG91_SENDER_ID,
+              mobiles: formattedPhone,
+              message: `Your Bhishak Med OTP is: ${otp}. Valid for 10 minutes. Do not share this code.`,
+            },
             {
               headers: {
+                'authkey': MSG91_AUTH_KEY,
                 'Content-Type': 'application/json',
               },
             }
           );
-          console.log('✅ MSG91 OTP sent via fallback endpoint');
+          console.log('✅ MSG91 SMS sent via fallback endpoint');
         } catch (fallbackError: any) {
           console.error('❌ MSG91 Fallback Error:', fallbackError.response?.data || fallbackError.message);
           throw new Error('Failed to send OTP via MSG91');
