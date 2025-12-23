@@ -28,13 +28,13 @@ function generateOtp(): string {
 async function sendViaFast2SMS(phone: string, otp: string): Promise<void> {
   const message = `Your Bhishak Med OTP is ${otp}. Valid for 10 minutes. Do not share with anyone.`;
 
+  // Use 'q' route (Quick/Promotional) - works without sender_id approval
   const response = await axios.post(
     'https://www.fast2sms.com/dev/bulkV2',
     {
-      route: 'dlt',
-      sender_id: 'TXTIND',
+      route: 'q',
       message: message,
-      variables_values: otp,
+      language: 'english',
       flash: 0,
       numbers: phone,
     },
