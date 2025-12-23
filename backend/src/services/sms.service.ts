@@ -99,6 +99,9 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; messag
         );
 
         console.log('✅ MSG91 SMS sent:', smsResponse.data);
+
+        // TESTING MODE: Log OTP to console (remove in production with DLT)
+        console.log(`📱 TEST MODE - OTP for ${phone}: ${otp} (DLT registration required for actual SMS delivery)`);
       } catch (smsError: any) {
         console.error('❌ MSG91 SMS Error:', smsError.response?.data || smsError.message);
 
@@ -112,18 +115,21 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; messag
                 authkey: MSG91_OTP_TOKEN,
                 mobiles: formattedPhone,
                 message: smsMessage,
-                sender: 'TXTIND',
+                sender: 'TeleMed',
                 route: '4',
                 country: '91',
               },
             }
           );
           console.log('✅ MSG91 SMS sent via fallback:', fallbackResponse.data);
+
+          // TESTING MODE: Log OTP to console (remove in production with DLT)
+          console.log(`📱 TEST MODE - OTP for ${phone}: ${otp} (DLT registration required for actual SMS delivery)`);
         } catch (fallbackError: any) {
           console.error('❌ MSG91 Fallback Error:', fallbackError.response?.data || fallbackError.message);
 
-          // Log OTP to console as last resort (for testing)
-          console.log(`⚠️ FALLBACK - OTP for ${phone}: ${otp} (check MSG91 configuration)`);
+          // TESTING MODE: Always log OTP for testing without DLT
+          console.log(`📱 TEST MODE - OTP for ${phone}: ${otp} (DLT registration required for SMS delivery)`);
         }
       }
     } else {
