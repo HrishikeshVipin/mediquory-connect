@@ -144,12 +144,32 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Verify OTP first
-    const otpResult = await verifyOtpSms(phone, otp);
-    if (!otpResult.success) {
+    // Check if OTP was recently verified (within last 10 minutes)
+    const recentlyVerifiedOtp = await prisma.patientOtp.findFirst({
+      where: {
+        phone,
+        verified: true,
+        createdAt: {
+          gte: new Date(Date.now() - 10 * 60 * 1000), // Last 10 minutes
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!recentlyVerifiedOtp) {
       res.status(400).json({
         success: false,
-        message: otpResult.message,
+        message: 'OTP verification expired. Please verify OTP again.',
+      });
+      return;
+    }
+
+    // Verify the OTP matches
+    const isOtpValid = await bcrypt.compare(otp, recentlyVerifiedOtp.otp);
+    if (!isOtpValid) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid OTP. Please try again.',
       });
       return;
     }
