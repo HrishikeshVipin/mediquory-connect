@@ -18,6 +18,7 @@ import {
   activatePlan,
   grantFeaturesToDoctor,
   getPlanHistory,
+  fixSubscriptionInconsistencies,
 } from '../controllers/subscriptionPlanAdmin.controller';
 import { verifyToken, isAdmin } from '../middleware/auth';
 
@@ -51,5 +52,6 @@ router.put('/subscription-plans/:planId/deactivate', deactivatePlan);
 router.put('/subscription-plans/:planId/activate', activatePlan);
 router.put('/doctors/:doctorId/grant-features', grantFeaturesToDoctor);
 router.get('/subscription-plans/:tier/history', getPlanHistory);
+router.post('/subscription-plans/fix-inconsistencies', fixSubscriptionInconsistencies);
 
 export default router;

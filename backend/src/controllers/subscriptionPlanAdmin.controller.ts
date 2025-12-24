@@ -462,3 +462,114 @@ export const getPlanHistory = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Fix subscription tier inconsistencies
+ * POST /api/admin/subscription-plans/fix-inconsistencies
+ * Admin only
+ *
+ * This endpoint checks if doctor's limits match their tier and fixes any mismatches
+ */
+export const fixSubscriptionInconsistencies = async (req: Request, res: Response) => {
+  try {
+    // Get all subscription plans
+    const plans = await prisma.subscriptionPlan.findMany();
+    const plansByTier = Object.fromEntries(plans.map(p => [p.tier, p]));
+
+    // Get all doctors
+    const doctors = await prisma.doctor.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        subscriptionTier: true,
+        subscriptionStatus: true,
+        patientLimit: true,
+        monthlyVideoMinutes: true,
+      },
+    });
+
+    const inconsistencies: any[] = [];
+    const fixes: any[] = [];
+
+    for (const doctor of doctors) {
+      const currentTierPlan = plansByTier[doctor.subscriptionTier];
+
+      if (!currentTierPlan) continue;
+
+      // Check if limits match the tier
+      const limitsMatch =
+        doctor.patientLimit === currentTierPlan.patientLimit &&
+        doctor.monthlyVideoMinutes === currentTierPlan.monthlyVideoMinutes;
+
+      if (!limitsMatch) {
+        // Find which tier the current limits belong to
+        let matchingTier = null;
+        for (const [tier, plan] of Object.entries(plansByTier)) {
+          if (
+            plan.patientLimit === doctor.patientLimit &&
+            plan.monthlyVideoMinutes === doctor.monthlyVideoMinutes
+          ) {
+            matchingTier = tier;
+            break;
+          }
+        }
+
+        inconsistencies.push({
+          doctor: {
+            id: doctor.id,
+            fullName: doctor.fullName,
+            email: doctor.email,
+          },
+          issue: {
+            currentTier: doctor.subscriptionTier,
+            currentLimits: {
+              patientLimit: doctor.patientLimit,
+              monthlyVideoMinutes: doctor.monthlyVideoMinutes,
+            },
+            expectedLimits: {
+              patientLimit: currentTierPlan.patientLimit,
+              monthlyVideoMinutes: currentTierPlan.monthlyVideoMinutes,
+            },
+            matchingTier,
+          },
+        });
+
+        // Auto-fix: Update tier to match limits
+        if (matchingTier) {
+          await prisma.doctor.update({
+            where: { id: doctor.id },
+            data: { subscriptionTier: matchingTier },
+          });
+
+          fixes.push({
+            doctorId: doctor.id,
+            doctorEmail: doctor.email,
+            action: `Updated tier from ${doctor.subscriptionTier} to ${matchingTier}`,
+            reason: 'Limits matched different tier',
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Found ${inconsistencies.length} inconsistencies, fixed ${fixes.length}`,
+      data: {
+        inconsistenciesFound: inconsistencies.length,
+        fixesApplied: fixes.length,
+        details: {
+          inconsistencies,
+          fixes,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Error fixing subscription inconsistencies:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fix subscription inconsistencies',
+      details: error.message,
+    });
+  }
+};
