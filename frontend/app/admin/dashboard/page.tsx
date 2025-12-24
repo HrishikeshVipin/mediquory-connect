@@ -8,6 +8,7 @@ import { useAuthStore } from '../../../store/authStore';
 import { connectSocket } from '../../../lib/socket';
 import { NotificationProvider } from '../../../context/NotificationContext';
 import NotificationBell from '../../../components/NotificationBell';
+import AnimatedBackground from '../../../components/AnimatedBackground';
 import type { PlatformStats } from '../../../types';
 
 export default function AdminDashboard() {
@@ -76,8 +77,11 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
+        <AnimatedBackground />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-lg text-blue-900">Loading...</div>
+        </div>
       </div>
     );
   }
@@ -88,19 +92,23 @@ export default function AdminDashboard() {
 
   return (
     <NotificationProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
+        <AnimatedBackground />
         {/* Header */}
-        <header className="bg-white shadow">
+        <header className="relative z-10 bg-white/80 backdrop-blur-lg border-b border-cyan-200/50 shadow-lg shadow-cyan-500/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600">Welcome, {user?.fullName || 'Admin'}</p>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Mediquory Connect" className="w-10 h-10" />
+              <div>
+                <h1 className="text-2xl font-bold text-blue-900">Admin Dashboard</h1>
+                <p className="text-sm text-gray-700">Welcome, {user?.fullName || 'Admin'}</p>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <NotificationBell />
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white rounded-xl transition-all hover:scale-105"
               >
                 Logout
               </button>
@@ -108,7 +116,7 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
@@ -153,43 +161,43 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-6">
+          <h2 className="text-xl font-semibold text-blue-900 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Link
               href="/admin/doctors/pending"
-              className="p-4 border-2 border-yellow-300 rounded-lg hover:bg-yellow-50 transition"
+              className="p-4 border-2 border-yellow-300/50 rounded-2xl hover:bg-yellow-50/50 transition-all duration-300 hover:scale-105 hover:-translate-y-1"
             >
               <h3 className="font-semibold text-yellow-800">Pending Verification</h3>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-700 mt-1">
                 Review {stats?.doctors.pending || 0} pending doctors
               </p>
             </Link>
 
             <Link
               href="/admin/doctors"
-              className="p-4 border-2 border-blue-300 rounded-lg hover:bg-blue-50 transition"
+              className="p-4 border-2 border-blue-300/50 rounded-2xl hover:bg-blue-50/50 transition-all duration-300 hover:scale-105 hover:-translate-y-1"
             >
               <h3 className="font-semibold text-blue-800">All Doctors</h3>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-700 mt-1">
                 Manage all {stats?.doctors.total || 0} doctors
               </p>
             </Link>
 
             <Link
               href="/admin/subscriptions"
-              className="p-4 border-2 border-purple-300 rounded-lg hover:bg-purple-50 transition"
+              className="p-4 border-2 border-purple-300/50 rounded-2xl hover:bg-purple-50/50 transition-all duration-300 hover:scale-105 hover:-translate-y-1"
             >
               <h3 className="font-semibold text-purple-800">Subscriptions</h3>
-              <p className="text-sm text-gray-600 mt-1">Manage subscriptions</p>
+              <p className="text-sm text-gray-700 mt-1">Manage subscriptions</p>
             </Link>
 
             <Link
               href="/admin/subscription-plans"
-              className="p-4 border-2 border-green-300 rounded-lg hover:bg-green-50 transition"
+              className="p-4 border-2 border-green-300/50 rounded-2xl hover:bg-green-50/50 transition-all duration-300 hover:scale-105 hover:-translate-y-1"
             >
               <h3 className="font-semibold text-green-800">Subscription Plans</h3>
-              <p className="text-sm text-gray-600 mt-1">Manage pricing and features</p>
+              <p className="text-sm text-gray-700 mt-1">Manage pricing and features</p>
             </Link>
           </div>
         </div>
@@ -208,33 +216,33 @@ interface StatsCardProps {
 
 function StatsCard({ title, value, color, link }: StatsCardProps) {
   const colorClasses = {
-    blue: 'bg-blue-500',
-    green: 'bg-green-500',
-    yellow: 'bg-yellow-500',
-    purple: 'bg-purple-500',
-    red: 'bg-red-500',
-    orange: 'bg-orange-500',
-    indigo: 'bg-indigo-500',
+    blue: 'from-blue-500 to-blue-600',
+    green: 'from-green-500 to-green-600',
+    yellow: 'from-yellow-500 to-yellow-600',
+    purple: 'from-purple-500 to-purple-600',
+    red: 'from-red-500 to-red-600',
+    orange: 'from-orange-500 to-orange-600',
+    indigo: 'from-indigo-500 to-indigo-600',
   };
 
   const content = (
     <>
-      <div className={`${colorClasses[color as keyof typeof colorClasses]} text-white px-4 py-5 rounded-t-lg`}>
+      <div className={`bg-gradient-to-r ${colorClasses[color as keyof typeof colorClasses]} text-white px-4 py-5 rounded-t-3xl`}>
         <h3 className="text-lg font-semibold">{title}</h3>
       </div>
-      <div className="bg-white px-4 py-6 rounded-b-lg">
-        <p className="text-3xl font-bold text-gray-900">{value}</p>
+      <div className="bg-white/70 backdrop-blur-xl px-4 py-6 rounded-b-3xl border-x border-b border-cyan-200/50">
+        <p className="text-3xl font-bold text-blue-900">{value}</p>
       </div>
     </>
   );
 
   if (link) {
     return (
-      <Link href={link} className="block hover:shadow-lg transition-shadow rounded-lg">
+      <Link href={link} className="block hover:shadow-2xl transition-all duration-300 hover:scale-105 hover:-translate-y-1 rounded-3xl shadow-lg shadow-cyan-500/10">
         {content}
       </Link>
     );
   }
 
-  return <div className="rounded-lg shadow">{content}</div>;
+  return <div className="rounded-3xl shadow-lg shadow-cyan-500/10 transition-all duration-300 hover:scale-105 hover:-translate-y-1">{content}</div>;
 }

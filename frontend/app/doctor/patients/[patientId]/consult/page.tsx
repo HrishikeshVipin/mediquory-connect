@@ -10,6 +10,7 @@ import ChatBox from '../../../../../components/ChatBox';
 import VideoRoom from '../../../../../components/VideoRoom';
 import PrescriptionForm from '../../../../../components/PrescriptionForm';
 import PaymentConfirmation from '../../../../../components/PaymentConfirmation';
+import AnimatedBackground from '../../../../../components/AnimatedBackground';
 import type { Socket } from 'socket.io-client';
 
 interface Consultation {
@@ -22,6 +23,8 @@ interface Consultation {
     phone?: string;
     age?: number;
     gender?: string;
+    status?: string;
+    videoCallEnabled?: boolean;
   };
   chatMessages: any[];
   prescription?: {
@@ -59,6 +62,9 @@ export default function DoctorConsultationPage() {
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [consultationHistory, setConsultationHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Check if patient is waitlisted
+  const isWaitlisted = consultation?.patient.status === 'WAITLISTED';
 
   useEffect(() => {
     if (!isAuthenticated || role !== 'DOCTOR') {
@@ -316,28 +322,77 @@ export default function DoctorConsultationPage() {
     }
   }, [activeTab]);
 
+  // Patient management handlers
+  const handleActivatePatient = async () => {
+    if (!consultation?.patient.id) return;
+
+    if (confirm(`Activate ${consultation.patient.fullName}? This will remove them from the waitlist.`)) {
+      try {
+        const response = await patientApi.activatePatient(consultation.patient.id);
+        if (response.success) {
+          alert('Patient activated successfully!');
+          // Refresh consultation to get updated patient status
+          startConsultation();
+        }
+      } catch (error: any) {
+        alert(error.response?.data?.message || 'Failed to activate patient');
+      }
+    }
+  };
+
+  const handleToggleVideo = async () => {
+    if (!consultation?.patient.id) return;
+
+    const currentStatus = consultation.patient.videoCallEnabled;
+    const newStatus = !currentStatus;
+
+    try {
+      const response = await patientApi.toggleVideoCall(consultation.patient.id, newStatus);
+      if (response.success) {
+        alert(`Video call ${newStatus ? 'enabled' : 'disabled'} successfully!`);
+        // Update consultation state
+        setConsultation({
+          ...consultation,
+          patient: {
+            ...consultation.patient,
+            videoCallEnabled: newStatus
+          }
+        });
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to toggle video call');
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
+        <AnimatedBackground />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-lg text-blue-900">Loading...</div>
+        </div>
       </div>
     );
   }
 
   if (!consultation || !consultation.patient) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg text-red-600">Failed to load consultation</div>
+      <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
+        <AnimatedBackground />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-lg text-red-600">Failed to load consultation</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
+      <AnimatedBackground />
       {/* Low Minutes Warning Modal */}
       {showMinuteWarning && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl p-6 max-w-md mx-4 border border-cyan-200/50">
             <div className="flex items-start gap-3 mb-4">
               <span className="text-3xl">⚠️</span>
               <div>
@@ -352,13 +407,13 @@ export default function DoctorConsultationPage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => router.push('/doctor/subscription')}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-xl transition-all hover:scale-105"
               >
                 Buy More Minutes
               </button>
               <button
                 onClick={() => setShowMinuteWarning(false)}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                className="flex-1 px-4 py-2 bg-white/80 backdrop-blur-lg text-gray-800 rounded-xl hover:bg-white border border-cyan-200/50 transition-all hover:scale-105"
               >
                 Continue Anyway
               </button>
@@ -368,14 +423,14 @@ export default function DoctorConsultationPage() {
       )}
 
       {/* Header */}
-      <header className="bg-white shadow">
+      <header className="relative z-10 bg-white/80 backdrop-blur-lg border-b border-cyan-200/50 shadow-lg shadow-cyan-500/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center mb-3">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-blue-900">
                 Consultation with {consultation.patient?.fullName || 'Patient'}
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-700">
                 {consultation.patient?.age && `${consultation.patient.age}y`}
                 {consultation.patient?.age && consultation.patient?.gender && ' • '}
                 {consultation.patient?.gender}
@@ -392,16 +447,50 @@ export default function DoctorConsultationPage() {
                 </div>
               )}
               <div className="flex gap-2">
+                {/* Patient Management Buttons */}
+                {consultation.patient.status === 'WAITLISTED' && (
+                  <button
+                    onClick={handleActivatePatient}
+                    className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transition-all hover:scale-105 flex items-center gap-2"
+                    title="Activate this patient"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Activate Patient
+                  </button>
+                )}
+                <button
+                  onClick={handleToggleVideo}
+                  disabled={isWaitlisted}
+                  className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+                    isWaitlisted
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : consultation.patient.videoCallEnabled
+                      ? 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white hover:scale-105'
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white hover:scale-105'
+                  }`}
+                  title={isWaitlisted ? 'Video call disabled for waitlisted patients' : consultation.patient.videoCallEnabled ? 'Disable video calling' : 'Enable video calling'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {consultation.patient.videoCallEnabled ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    )}
+                  </svg>
+                  {isWaitlisted ? 'Video Disabled (Waitlisted)' : consultation.patient.videoCallEnabled ? 'Disable Video' : 'Enable Video'}
+                </button>
                 <button
                   onClick={endConsultation}
                   disabled={consultation.status === 'COMPLETED'}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white rounded-xl transition-all hover:scale-105 disabled:bg-gray-400 disabled:hover:scale-100"
                 >
                   End Consultation
                 </button>
                 <Link
                   href="/doctor/patients"
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+                  className="px-4 py-2 text-gray-700 hover:bg-cyan-50/50 rounded-xl border border-cyan-200/50 transition-all hover:scale-105"
                 >
                   Back to Patients
                 </Link>
@@ -411,7 +500,7 @@ export default function DoctorConsultationPage() {
 
           {/* Overtime Warning Banner */}
           {inOvertime && (
-            <div className="bg-red-100 border border-red-300 rounded-lg px-4 py-3">
+            <div className="bg-red-100/70 backdrop-blur-xl border border-red-300/50 rounded-2xl shadow-lg px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🚨</span>
                 <div className="flex-1">
@@ -420,7 +509,7 @@ export default function DoctorConsultationPage() {
                 </div>
                 <Link
                   href="/doctor/subscription"
-                  className="px-4 py-2 bg-white text-red-900 rounded hover:bg-red-50 font-medium text-sm"
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-xl font-medium text-sm transition-all hover:scale-105"
                 >
                   Buy Minutes
                 </Link>
@@ -430,7 +519,7 @@ export default function DoctorConsultationPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tabs */}
         <div className="mb-6">
           <div className="border-b border-gray-200">
@@ -466,9 +555,9 @@ export default function DoctorConsultationPage() {
               <>
                 {/* Video Section */}
                 {isVideoActive && videoTokens ? (
-              <div className="bg-white rounded-lg shadow">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Video Consultation</h2>
+              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10">
+                <div className="px-6 py-4 border-b border-cyan-200/50">
+                  <h2 className="text-lg font-semibold text-blue-900">Video Consultation</h2>
                 </div>
                 <div className="p-6">
                   <VideoRoom
@@ -485,9 +574,9 @@ export default function DoctorConsultationPage() {
             ) : null}
 
             {/* Chat Section */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Chat Consultation</h2>
+            <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10">
+              <div className="px-6 py-4 border-b border-cyan-200/50">
+                <h2 className="text-lg font-semibold text-blue-900">Chat Consultation</h2>
               </div>
               <div className="p-6">
                 {socket && joined ? (
@@ -497,6 +586,7 @@ export default function DoctorConsultationPage() {
                     userType="doctor"
                     userName={user?.fullName || 'Doctor'}
                     initialMessages={consultation.chatMessages || []}
+                    isWaitlisted={isWaitlisted}
                   />
                 ) : (
                   <div className="text-center py-8 text-gray-500">
@@ -510,10 +600,10 @@ export default function DoctorConsultationPage() {
               </>
             ) : (
               /* History View */
-              <div className="bg-white rounded-lg shadow">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Consultation History</h2>
-                  <p className="text-sm text-gray-600 mt-1">Past consultations with {consultation.patient?.fullName}</p>
+              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10">
+                <div className="px-6 py-4 border-b border-cyan-200/50">
+                  <h2 className="text-lg font-semibold text-blue-900">Consultation History</h2>
+                  <p className="text-sm text-gray-700 mt-1">Past consultations with {consultation.patient?.fullName}</p>
                 </div>
                 <div className="p-6">
                   {loadingHistory ? (
@@ -530,7 +620,7 @@ export default function DoctorConsultationPage() {
                   ) : (
                     <div className="space-y-6">
                       {consultationHistory.map((pastConsult: any) => (
-                        <div key={pastConsult.id} className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div key={pastConsult.id} className="border border-cyan-200/50 rounded-2xl p-5 hover:shadow-md transition-all hover:scale-102 bg-white/50">
                           {/* Consultation Header */}
                           <div className="flex justify-between items-start mb-4">
                             <div>
@@ -594,7 +684,10 @@ export default function DoctorConsultationPage() {
                                 <div>
                                   <p className="text-sm text-gray-600 font-medium mb-2">Medications:</p>
                                   <div className="space-y-2">
-                                    {JSON.parse(pastConsult.prescription.medications).map((med: any, idx: number) => (
+                                    {(typeof pastConsult.prescription.medications === 'string'
+                                      ? JSON.parse(pastConsult.prescription.medications)
+                                      : pastConsult.prescription.medications
+                                    ).map((med: any, idx: number) => (
                                       <div key={idx} className="bg-gray-50 p-2 rounded text-xs border border-gray-200">
                                         <p className="font-semibold text-gray-900">{idx + 1}. {med.name}</p>
                                         <p className="text-gray-600">
@@ -637,9 +730,14 @@ export default function DoctorConsultationPage() {
 
           {/* Notes Section - 1/3 width */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Consultation Notes</h2>
+            <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10">
+              <div className="px-6 py-4 border-b border-cyan-200/50">
+                <h2 className="text-lg font-semibold text-blue-900">
+                  Consultation Notes
+                  {isWaitlisted && (
+                    <span className="ml-2 text-xs font-normal text-orange-600">(Disabled - Waitlisted Patient)</span>
+                  )}
+                </h2>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -649,9 +747,12 @@ export default function DoctorConsultationPage() {
                   <textarea
                     value={notes.chiefComplaint}
                     onChange={(e) => setNotes({ ...notes, chiefComplaint: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isWaitlisted}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isWaitlisted ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                    }`}
                     rows={3}
-                    placeholder="Patient's main concern..."
+                    placeholder={isWaitlisted ? "Notes disabled for waitlisted patients" : "Patient's main concern..."}
                   />
                 </div>
 
@@ -662,17 +763,25 @@ export default function DoctorConsultationPage() {
                   <textarea
                     value={notes.doctorNotes}
                     onChange={(e) => setNotes({ ...notes, doctorNotes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isWaitlisted}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isWaitlisted ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                    }`}
                     rows={6}
-                    placeholder="Clinical notes, observations, treatment plan..."
+                    placeholder={isWaitlisted ? "Notes disabled for waitlisted patients" : "Clinical notes, observations, treatment plan..."}
                   />
                 </div>
 
                 <button
                   onClick={saveNotes}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  disabled={isWaitlisted}
+                  className={`w-full px-4 py-2 rounded-xl transition-all ${
+                    isWaitlisted
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white hover:scale-105'
+                  }`}
                 >
-                  Save Notes
+                  {isWaitlisted ? 'Save Disabled (Waitlisted)' : 'Save Notes'}
                 </button>
 
                 <div className="pt-4 border-t border-gray-200">
@@ -681,15 +790,20 @@ export default function DoctorConsultationPage() {
                     {!isVideoActive ? (
                       <button
                         onClick={startVideoCall}
-                        disabled={loadingVideo}
-                        className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed"
+                        disabled={loadingVideo || isWaitlisted}
+                        className={`w-full px-4 py-2 rounded-xl transition-all ${
+                          isWaitlisted
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white hover:scale-105 disabled:bg-purple-400 disabled:cursor-not-allowed disabled:hover:scale-100'
+                        }`}
+                        title={isWaitlisted ? 'Video call disabled for waitlisted patients' : ''}
                       >
-                        {loadingVideo ? 'Starting Video...' : 'Start Video Call'}
+                        {isWaitlisted ? 'Video Disabled (Waitlisted)' : loadingVideo ? 'Starting Video...' : 'Start Video Call'}
                       </button>
                     ) : (
                       <button
                         onClick={handleVideoLeave}
-                        className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                        className="w-full px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white rounded-xl transition-all hover:scale-105"
                       >
                         Leave Video Call
                       </button>
@@ -700,10 +814,30 @@ export default function DoctorConsultationPage() {
             </div>
 
             {/* Prescription Section */}
-            {!consultation.prescription ? (
-              <div className="bg-white rounded-lg shadow mt-6">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Generate Prescription</h2>
+            {isWaitlisted ? (
+              <div className="bg-orange-50/70 backdrop-blur-xl border border-orange-200/50 rounded-3xl shadow-lg shadow-orange-500/10 mt-6">
+                <div className="px-6 py-4 border-b border-orange-200/50">
+                  <h2 className="text-lg font-semibold text-orange-900">Prescription Disabled</h2>
+                </div>
+                <div className="p-6">
+                  <div className="flex items-start gap-3">
+                    <span className="text-3xl">⚠️</span>
+                    <div>
+                      <h3 className="font-semibold text-orange-900 mb-2">Patient is Waitlisted</h3>
+                      <p className="text-sm text-orange-800 mb-3">
+                        This patient is currently on your waitlist. You need to activate the patient before generating prescriptions.
+                      </p>
+                      <p className="text-sm text-orange-700">
+                        To activate this patient, please update their subscription plan to allow more active patients.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : !consultation.prescription ? (
+              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 mt-6">
+                <div className="px-6 py-4 border-b border-cyan-200/50">
+                  <h2 className="text-lg font-semibold text-blue-900">Generate Prescription</h2>
                 </div>
                 <div className="p-6">
                   <PrescriptionForm
@@ -713,9 +847,9 @@ export default function DoctorConsultationPage() {
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow mt-6">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Prescription Generated</h2>
+              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 mt-6">
+                <div className="px-6 py-4 border-b border-cyan-200/50">
+                  <h2 className="text-lg font-semibold text-blue-900">Prescription Generated</h2>
                 </div>
                 <div className="p-6">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">

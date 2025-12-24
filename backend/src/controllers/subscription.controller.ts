@@ -172,12 +172,12 @@ export const getMySubscription = async (req: Request, res: Response): Promise<vo
       canStartConsultation = false;
       statusMessage = 'No video minutes remaining. Please purchase more minutes.';
       warningLevel = 'expired';
-    } else if (availableMinutes <= 50 && availableMinutes > 0) {
+    } else if (availableMinutes <= 15 && availableMinutes > 0) {
       if (warningLevel !== 'expired') {
         statusMessage = `Only ${availableMinutes} minutes remaining`;
         warningLevel = 'critical';
       }
-    } else if (availableMinutes <= 100 && availableMinutes > 50) {
+    } else if (availableMinutes <= 30 && availableMinutes > 15) {
       if (warningLevel === 'none') {
         statusMessage = `${availableMinutes} minutes remaining`;
         warningLevel = 'low';

@@ -17,6 +17,7 @@ interface ChatBoxProps {
   userType: 'doctor' | 'patient';
   userName: string;
   initialMessages?: Message[];
+  isWaitlisted?: boolean;
 }
 
 export default function ChatBox({
@@ -25,25 +26,29 @@ export default function ChatBox({
   userType,
   userName,
   initialMessages = [],
+  isWaitlisted = false,
 }: ChatBoxProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [limitMessage, setLimitMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const WAITLIST_MESSAGE_LIMIT = 10;
 
   // Debug: Log initial messages
   useEffect(() => {
     console.log('💬 ChatBox initialized with', initialMessages.length, 'messages:', initialMessages);
+    setMessages(initialMessages);
   }, []);
 
-  // Update messages when initialMessages changes
+  // Update messages when initialMessages changes (sync with parent)
   useEffect(() => {
-    if (initialMessages.length > 0) {
-      console.log('🔄 Updating messages from initialMessages:', initialMessages.length);
-      setMessages(initialMessages);
-    }
+    console.log('🔄 Syncing messages from initialMessages:', initialMessages.length, 'messages');
+    setMessages(initialMessages);
   }, [initialMessages]);
 
   const scrollToBottom = () => {
@@ -71,10 +76,18 @@ export default function ChatBox({
       setOtherUserTyping(false);
     });
 
+    // Listen for message limit reached
+    socket.on('message-limit-reached', (data: { message: string; limit: number; currentCount: number }) => {
+      setLimitReached(true);
+      setLimitMessage(data.message);
+      alert(data.message);
+    });
+
     return () => {
       socket.off('receive-message');
       socket.off('user-typing');
       socket.off('user-stop-typing');
+      socket.off('message-limit-reached');
     };
   }, [socket]);
 
@@ -101,6 +114,12 @@ export default function ChatBox({
 
     if (!newMessage.trim()) return;
 
+    // Check if limit is reached
+    if (limitReached || (isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT)) {
+      alert(`Message limit reached (${WAITLIST_MESSAGE_LIMIT} messages). Please wait for doctor to activate your account.`);
+      return;
+    }
+
     // Emit message to server
     socket.emit('send-message', {
       consultationId,
@@ -121,6 +140,26 @@ export default function ChatBox({
         <h3 className="font-semibold text-gray-900">Chat Consultation</h3>
         <p className="text-xs text-gray-500">Real-time messaging</p>
       </div>
+
+      {/* Waitlist Warning Banner */}
+      {isWaitlisted && (
+        <div className="bg-orange-100 border-b border-orange-200 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <span className="text-orange-600 text-lg flex-shrink-0">⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-orange-900">Limited Chat Access - Waitlisted Patient</p>
+              <p className="text-xs text-orange-800 mt-1">
+                You can send up to {WAITLIST_MESSAGE_LIMIT} messages total.
+                <span className="font-semibold"> {messages.length}/{WAITLIST_MESSAGE_LIMIT} messages used.</span>
+                {messages.length >= WAITLIST_MESSAGE_LIMIT ? ' Limit reached!' : ''}
+              </p>
+              <p className="text-xs text-orange-700 mt-1">
+                Please wait for the doctor to activate your account for full access.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: '400px' }}>
@@ -188,17 +227,31 @@ export default function ChatBox({
               setNewMessage(e.target.value);
               handleTyping();
             }}
-            placeholder="Type your message..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={
+              isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT
+                ? "Message limit reached"
+                : "Type your message..."
+            }
+            disabled={isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT}
+            className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT
+                ? 'bg-gray-100 cursor-not-allowed text-gray-500'
+                : ''
+            }`}
           />
           <button
             type="submit"
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || (isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT)}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Send
           </button>
         </div>
+        {isWaitlisted && messages.length >= WAITLIST_MESSAGE_LIMIT && (
+          <p className="text-xs text-orange-600 mt-2 font-medium">
+            ⚠️ Message limit reached. Ask doctor to activate your account.
+          </p>
+        )}
       </form>
     </div>
   );

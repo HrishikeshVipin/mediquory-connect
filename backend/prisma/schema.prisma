@@ -118,7 +118,8 @@ model Doctor {
   averageRating Decimal? @default(0) @db.Decimal(3, 2)
 
   // Phase 2: Appointment Scheduling
-  appointmentBuffer Int @default(5) // Minutes between appointments
+  appointmentBuffer   Int @default(5) // Minutes between appointments
+  defaultSlotDuration Int @default(30) // 15, 30, or 60 minutes
 
   // Phase 2: Referral Credits
   referralCredits Int @default(0) // Total credits earned from referrals
@@ -505,27 +506,41 @@ model PatientOtp {
   @@index([phone])
 }
 
-// Phase 2: Appointment Scheduling
+// Phase 2: Appointment Request System (Flexible, no time slots)
 model Appointment {
-  id                 String   @id @default(uuid())
-  doctorId           String
-  patientId          String
-  scheduledTime      DateTime
-  duration           Int      @default(30) // Minutes
-  status             String   @default("SCHEDULED") // "SCHEDULED" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
-  consultationType   String   @default("VIDEO") // "VIDEO" | "CHAT" | "BOTH"
-  notes              String?  @db.Text
-  cancellationReason String?
-  consultationId     String?  @unique // Link to actual consultation when started
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  doctorId                String
+  patientId               String
+
+  // REQUEST PHASE - Patient submission
+  requestedDate           DateTime  // Date patient wants appointment
+  requestedTimePreference String?   // "MORNING" | "AFTERNOON" | "EVENING"
+  reason                  String?   @db.Text // Patient's reason for appointment
+
+  // RESPONSE PHASE - Doctor action
+  scheduledTime           DateTime? // Confirmed time (null until accepted)
+  proposedTime            DateTime? // Alternative time proposed by doctor
+  proposedMessage         String?   @db.Text // Doctor's message with proposal
+  rejectionReason         String?   @db.Text // Why doctor rejected
+
+  // METADATA
+  duration                Int      @default(30) // Minutes
+  status                  String   @default("REQUESTED") // "REQUESTED" | "PROPOSED_ALTERNATIVE" | "CONFIRMED" | "REJECTED" | "CANCELLED" | "COMPLETED"
+  consultationType        String   @default("VIDEO") // "VIDEO" | "CHAT" | "BOTH"
+  consultationId          String?  @unique // Link to actual consultation when started
+
+  // TIMESTAMPS
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  respondedAt             DateTime? // When doctor responded
 
   doctor       Doctor         @relation(fields: [doctorId], references: [id])
   patient      Patient        @relation(fields: [patientId], references: [id])
   consultation Consultation?  @relation(fields: [consultationId], references: [id])
 
+  @@index([doctorId, status, requestedDate])
+  @@index([patientId, status])
   @@index([doctorId, scheduledTime])
-  @@index([patientId, scheduledTime])
 }
 
 // Phase 2: Medicine Reminders

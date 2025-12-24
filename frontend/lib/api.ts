@@ -656,4 +656,81 @@ export const doctorDiscovery = {
     },
 };
 
+// Appointment API
+export const appointmentApi = {
+  // Doctor Availability
+  getAvailability: async () => {
+    const { data } = await api.get<ApiResponse<any>>('/appointments/doctors/availability');
+    return data;
+  },
+
+  updateAvailability: async (availabilityData: any) => {
+    const { data } = await api.put<ApiResponse<any>>('/appointments/doctors/availability', availabilityData);
+    return data;
+  },
+
+  // Doctor Appointment Management
+  getPendingRequests: async (params?: { page?: number; limit?: number }) => {
+    const { data } = await api.get<ApiResponse<any>>('/appointments/requests', { params });
+    return data;
+  },
+
+  getUpcomingAppointments: async () => {
+    const { data } = await api.get<ApiResponse<any>>('/appointments/upcoming');
+    return data;
+  },
+
+  getPastAppointments: async (params?: { page?: number; limit?: number }) => {
+    const { data } = await api.get<ApiResponse<any>>('/appointments/history', { params });
+    return data;
+  },
+
+  acceptRequest: async (appointmentId: string, acceptData: { scheduledTime: string; duration?: number; message?: string }) => {
+    const { data } = await api.post<ApiResponse<any>>(`/appointments/${appointmentId}/accept`, acceptData);
+    return data;
+  },
+
+  proposeAlternative: async (appointmentId: string, proposeData: { proposedTime: string; proposedMessage: string }) => {
+    const { data } = await api.post<ApiResponse<any>>(`/appointments/${appointmentId}/propose-alternative`, proposeData);
+    return data;
+  },
+
+  rejectRequest: async (appointmentId: string, rejectionData: { rejectionReason: string }) => {
+    const { data } = await api.post<ApiResponse<any>>(`/appointments/${appointmentId}/reject`, rejectionData);
+    return data;
+  },
+
+  cancelAppointment: async (appointmentId: string, cancellationData: { cancellationReason: string }) => {
+    const { data } = await api.put<ApiResponse<any>>(`/appointments/${appointmentId}/cancel`, cancellationData);
+    return data;
+  },
+
+  // Patient Appointment Management
+  requestAppointment: async (requestData: {
+    doctorId: string;
+    requestedDate: string;
+    requestedTimePreference: string;
+    reason: string;
+    consultationType: string;
+  }) => {
+    const { data} = await api.post<ApiResponse<any>>('/appointments/patient/request', requestData);
+    return data;
+  },
+
+  getPatientAppointments: async (params?: { status?: string; page?: number }) => {
+    const { data } = await api.get<ApiResponse<any>>('/appointments/patient', { params });
+    return data;
+  },
+
+  acceptProposal: async (appointmentId: string) => {
+    const { data } = await api.post<ApiResponse<any>>(`/appointments/patient/${appointmentId}/accept-proposal`);
+    return data;
+  },
+
+  declineProposal: async (appointmentId: string, message?: string) => {
+    const { data } = await api.post<ApiResponse<any>>(`/appointments/patient/${appointmentId}/decline-proposal`, { message });
+    return data;
+  },
+};
+
 export default api;

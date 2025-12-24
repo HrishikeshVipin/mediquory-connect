@@ -183,98 +183,196 @@ async function generatePrescriptionPDF(
 
       doc.pipe(stream);
 
-      // Header
+      // App Header with Branding
       doc
-        .fontSize(20)
+        .fillColor('#1e3a8a') // Navy blue
+        .fontSize(24)
         .font('Helvetica-Bold')
-        .text('MEDICAL PRESCRIPTION', { align: 'center' })
-        .moveDown();
-
-      // Serial Number (top-right)
-      doc
-        .fontSize(14)
-        .font('Helvetica-Bold')
-        .text(`Prescription #${prescription.serialNumber}`, { align: 'right' })
-        .moveDown();
-
-      // Doctor Info
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .text(`Dr. ${consultation.doctor.fullName}`)
+        .text('MEDIQUORY CONNECT', { align: 'center' })
+        .fillColor('#06b6d4') // Cyan
+        .fontSize(10)
         .font('Helvetica')
-        .text(consultation.doctor.specialization)
-        .text(`Reg. No: ${consultation.doctor.registrationNo}`)
-        .text(`Phone: ${consultation.doctor.phone}`)
+        .text('Your Health, Our Priority', { align: 'center' })
+        .moveDown(0.5);
+
+      // Decorative line
+      doc
+        .strokeColor('#06b6d4')
+        .lineWidth(2)
+        .moveTo(50, doc.y)
+        .lineTo(550, doc.y)
+        .stroke()
+        .moveDown();
+
+      // Prescription Title and Serial Number
+      doc
+        .fillColor('#1e3a8a')
+        .fontSize(18)
+        .font('Helvetica-Bold')
+        .text('MEDICAL PRESCRIPTION', 50, doc.y, { align: 'left' })
+        .fontSize(12)
+        .fillColor('#06b6d4')
+        .text(`Rx #${prescription.serialNumber}`, { align: 'right' })
         .moveDown();
 
       // Date
       doc
+        .fillColor('#000000')
         .fontSize(10)
-        .text(`Date: ${new Date().toLocaleDateString()}`, { align: 'right' })
-        .moveDown();
-
-      // Patient Info
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .text('Patient Information:')
         .font('Helvetica')
-        .text(`Name: ${consultation.patient.fullName}`)
-        .text(`Age: ${consultation.patient.age || 'N/A'} | Gender: ${consultation.patient.gender || 'N/A'}`)
+        .text(`Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, { align: 'right' })
         .moveDown();
 
-      // Diagnosis
+      // Doctor Info Box
       doc
-        .fontSize(12)
+        .fillColor('#1e3a8a')
+        .fontSize(11)
         .font('Helvetica-Bold')
-        .text('Diagnosis:')
+        .text('DOCTOR INFORMATION')
+        .moveDown(0.3);
+
+      doc
+        .fillColor('#000000')
+        .fontSize(10)
+        .font('Helvetica-Bold')
+        .text(`Dr. ${consultation.doctor.fullName}`, 70)
         .font('Helvetica')
-        .text(diagnosis)
+        .fillColor('#444444')
+        .text(`Specialization: ${consultation.doctor.specialization}`, 70)
+        .text(`Registration No: ${consultation.doctor.registrationNo}`, 70)
+        .text(`Phone: ${consultation.doctor.phone}`, 70)
         .moveDown();
 
-      // Medications
+      // Patient Info Box
+      doc
+        .fillColor('#1e3a8a')
+        .fontSize(11)
+        .font('Helvetica-Bold')
+        .text('PATIENT INFORMATION')
+        .moveDown(0.3);
+
+      doc
+        .fillColor('#000000')
+        .fontSize(10)
+        .font('Helvetica-Bold')
+        .text(`Name: ${consultation.patient.fullName}`, 70)
+        .font('Helvetica')
+        .fillColor('#444444')
+        .text(`Age: ${consultation.patient.age || 'N/A'} years  |  Gender: ${consultation.patient.gender || 'N/A'}`, 70)
+        .moveDown(1.5);
+
+      // Diagnosis Section
+      doc
+        .fillColor('#1e3a8a')
+        .fontSize(11)
+        .font('Helvetica-Bold')
+        .text('DIAGNOSIS')
+        .moveDown(0.3);
+
+      doc
+        .fillColor('#000000')
+        .fontSize(10)
+        .font('Helvetica')
+        .text(diagnosis, 70, doc.y, { width: 480 })
+        .moveDown(1.5);
+
+      // Medications Section (Rx Symbol)
       if (medications && medications.length > 0) {
         doc
-          .fontSize(12)
+          .fillColor('#1e3a8a')
+          .fontSize(11)
           .font('Helvetica-Bold')
-          .text('Medications:')
+          .text('℞  PRESCRIPTION MEDICATIONS')
           .moveDown(0.5);
 
         medications.forEach((med: any, index: number) => {
+          // Medicine number and name
           doc
+            .fillColor('#06b6d4')
+            .fontSize(10)
             .font('Helvetica-Bold')
-            .text(`${index + 1}. ${med.name}`)
+            .text(`${index + 1}. ${med.name}`, 70);
+
+          // Details in gray
+          doc
+            .fillColor('#444444')
+            .fontSize(9)
             .font('Helvetica')
-            .text(`   Dosage: ${med.dosage}`)
-            .text(`   Frequency: ${med.frequency}`)
-            .text(`   Duration: ${med.duration}`)
-            .moveDown(0.5);
+            .text(`Dosage: ${med.dosage}  |  Frequency: ${med.frequency}  |  Duration: ${med.duration}`, 85)
+            .moveDown(0.7);
         });
+
+        doc.moveDown(0.5);
       }
 
-      // Instructions
+      // Instructions Section
       if (instructions) {
         doc
-          .moveDown()
-          .fontSize(12)
+          .fillColor('#1e3a8a')
+          .fontSize(11)
           .font('Helvetica-Bold')
-          .text('Instructions:')
+          .text('SPECIAL INSTRUCTIONS')
+          .moveDown(0.3);
+
+        doc
+          .fillColor('#000000')
+          .fontSize(10)
           .font('Helvetica')
-          .text(instructions)
-          .moveDown();
+          .text(instructions, 70, doc.y, { width: 480 })
+          .moveDown(1.5);
       }
+
+      // Decorative line before footer
+      doc
+        .moveDown(2)
+        .strokeColor('#06b6d4')
+        .lineWidth(1)
+        .moveTo(50, doc.y)
+        .lineTo(550, doc.y)
+        .stroke()
+        .moveDown(0.5);
 
       // Footer
       doc
-        .moveDown(2)
+        .fillColor('#444444')
         .fontSize(8)
-        .text(`Prescription #${prescription.serialNumber} | Generated on ${new Date().toLocaleString()}`, { align: 'left' })
-        .moveDown()
-        .fontSize(10)
-        .text('_________________________', { align: 'right' })
-        .text(`Dr. ${consultation.doctor.fullName}`, { align: 'right' })
-        .text('Doctor\'s Signature', { align: 'right' });
+        .font('Helvetica')
+        .text(`Prescription #${prescription.serialNumber} | Generated on ${new Date().toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })}`, 50, doc.y, { align: 'left' })
+        .moveDown(1.5);
+
+      // Signature Section
+      doc
+        .fillColor('#000000')
+        .fontSize(9)
+        .font('Helvetica')
+        .text('Doctor\'s Signature:', 350, doc.y)
+        .moveDown(0.5)
+        .strokeColor('#000000')
+        .lineWidth(1)
+        .moveTo(350, doc.y)
+        .lineTo(500, doc.y)
+        .stroke()
+        .moveDown(0.3)
+        .fillColor('#1e3a8a')
+        .fontSize(9)
+        .font('Helvetica-Bold')
+        .text(`Dr. ${consultation.doctor.fullName}`, 350, doc.y)
+        .fillColor('#444444')
+        .fontSize(8)
+        .font('Helvetica')
+        .text(consultation.doctor.specialization, 350, doc.y + 12);
+
+      // Footer note
+      doc
+        .moveDown(3)
+        .fillColor('#06b6d4')
+        .fontSize(8)
+        .font('Helvetica-Bold')
+        .text('Mediquory Connect - Your Health, Our Priority', { align: 'center' })
+        .fillColor('#444444')
+        .fontSize(7)
+        .font('Helvetica')
+        .text('This is a digitally generated prescription', { align: 'center' });
 
       doc.end();
 

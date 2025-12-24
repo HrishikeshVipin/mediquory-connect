@@ -237,3 +237,57 @@ export interface DoctorMedicine {
   usageCount: number;
   addedAt: string;
 }
+
+// Appointment types
+export type AppointmentStatus =
+  | 'REQUESTED'
+  | 'PROPOSED_ALTERNATIVE'
+  | 'CONFIRMED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'COMPLETED';
+
+export type TimePreference = 'MORNING' | 'AFTERNOON' | 'EVENING';
+
+export interface Appointment {
+  id: string;
+  doctorId: string;
+  patientId: string;
+  requestedDate: string;
+  requestedTimePreference?: TimePreference;
+  reason?: string;
+  scheduledTime?: string;
+  proposedTime?: string;
+  proposedMessage?: string;
+  rejectionReason?: string;
+  duration: number;
+  status: AppointmentStatus;
+  consultationType: 'VIDEO' | 'CHAT' | 'BOTH';
+  consultationId?: string;
+  createdAt: string;
+  updatedAt: string;
+  respondedAt?: string;
+  doctor?: {
+    id: string;
+    fullName: string;
+    specialization: string;
+    profilePhoto?: string;
+  };
+  patient?: {
+    id: string;
+    fullName: string;
+    age?: number;
+    gender?: string;
+    phone?: string;
+  };
+}
+
+export interface DoctorAvailability {
+  monday?: { enabled: boolean; start: string; end: string };
+  tuesday?: { enabled: boolean; start: string; end: string };
+  wednesday?: { enabled: boolean; start: string; end: string };
+  thursday?: { enabled: boolean; start: string; end: string };
+  friday?: { enabled: boolean; start: string; end: string };
+  saturday?: { enabled: boolean; start: string; end: string };
+  sunday?: { enabled: boolean; start: string; end: string };
+}

@@ -98,6 +98,8 @@ export const startConsultation = async (req: Request, res: Response): Promise<vo
             phone: true,
             age: true,
             gender: true,
+            status: true,
+            videoCallEnabled: true,
           },
         },
         chatMessages: {
@@ -124,6 +126,8 @@ export const startConsultation = async (req: Request, res: Response): Promise<vo
               phone: true,
               age: true,
               gender: true,
+              status: true,
+              videoCallEnabled: true,
             },
           },
           chatMessages: true,
@@ -139,9 +143,9 @@ export const startConsultation = async (req: Request, res: Response): Promise<vo
 
     // Determine warning level based on available minutes
     let warningLevel: 'none' | 'low' | 'critical' = 'none';
-    if (availableMinutes <= 50) {
+    if (availableMinutes <= 15) {
       warningLevel = 'critical';
-    } else if (availableMinutes <= 100) {
+    } else if (availableMinutes <= 30) {
       warningLevel = 'low';
     }
 
@@ -178,6 +182,8 @@ export const getConsultation = async (req: Request, res: Response): Promise<void
             phone: true,
             age: true,
             gender: true,
+            status: true,
+            videoCallEnabled: true,
           },
         },
         doctor: {

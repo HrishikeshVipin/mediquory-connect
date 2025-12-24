@@ -89,6 +89,40 @@ export const initializeChatSocket = (io: SocketIOServer) => {
       try {
         const { consultationId, senderType, senderName, message } = data;
 
+        // Get consultation with patient status
+        const consultation = await prisma.consultation.findUnique({
+          where: { id: consultationId },
+          include: {
+            patient: { select: { id: true, fullName: true, status: true } },
+            doctor: { select: { id: true, fullName: true, email: true, emailNotifications: true, chatNotifications: true } },
+          },
+        });
+
+        if (!consultation) {
+          socket.emit('error', {
+            message: 'Consultation not found',
+          });
+          return;
+        }
+
+        // Check waitlist message limit (10 messages max for waitlisted patients)
+        if (consultation.patient.status === 'WAITLISTED') {
+          const messageCount = await prisma.chatMessage.count({
+            where: { consultationId },
+          });
+
+          const WAITLIST_MESSAGE_LIMIT = 10;
+
+          if (messageCount >= WAITLIST_MESSAGE_LIMIT) {
+            socket.emit('message-limit-reached', {
+              message: `Message limit reached (${WAITLIST_MESSAGE_LIMIT} messages). Please wait for doctor to activate your account.`,
+              limit: WAITLIST_MESSAGE_LIMIT,
+              currentCount: messageCount,
+            });
+            return;
+          }
+        }
+
         // Save message to database
         const chatMessage = await prisma.chatMessage.create({
           data: {
@@ -99,15 +133,7 @@ export const initializeChatSocket = (io: SocketIOServer) => {
           },
         });
 
-        // Get consultation details for notifications
-        const consultation = await prisma.consultation.findUnique({
-          where: { id: consultationId },
-          include: {
-            doctor: { select: { id: true, fullName: true, email: true, emailNotifications: true, chatNotifications: true } },
-            patient: { select: { id: true, fullName: true } },
-          },
-        });
-
+        // Update consultation tracking and send notifications
         if (consultation) {
           // Update consultation last message tracking
           await prisma.consultation.update({
