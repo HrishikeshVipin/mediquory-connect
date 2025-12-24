@@ -304,7 +304,7 @@ export default function DoctorDashboard() {
                       <p className="text-lg font-bold text-blue-900">
                         {subscriptionLoading
                           ? 'Loading...'
-                          : (subscriptionInfo?.subscription.tier || doctor?.subscriptionTier || 'TRIAL')
+                          : (subscriptionInfo?.subscription.subscriptionTier || doctor?.subscriptionTier || 'TRIAL')
                         }
                       </p>
                     </div>
