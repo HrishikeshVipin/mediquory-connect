@@ -214,6 +214,16 @@ export default function DoctorDashboard() {
                   <p className="text-sm font-semibold text-blue-900">Dr. {doctor.fullName}</p>
                   <p className="text-xs text-gray-700">{doctor.specialization}</p>
                 </div>
+                <Link
+                  href="/doctor/account"
+                  className="px-3 py-2 sm:px-4 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-xl font-medium text-sm transition-all hover:scale-105"
+                  title="My Account"
+                >
+                  <svg className="w-5 h-5 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="hidden sm:inline">My Account</span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="px-3 py-2 sm:px-4 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white rounded-xl font-medium text-sm transition-all hover:scale-105"
@@ -294,7 +304,7 @@ export default function DoctorDashboard() {
                       <p className="text-lg font-bold text-blue-900">
                         {subscriptionLoading
                           ? 'Loading...'
-                          : (subscriptionInfo?.subscription.tier || doctor.subscriptionTier || 'FREE')
+                          : (subscriptionInfo?.subscription.tier || doctor?.subscriptionTier || 'TRIAL')
                         }
                       </p>
                     </div>
