@@ -331,7 +331,7 @@ export default function SubscriptionPage() {
           </p>
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
             {plans.map((plan) => {
-              const isCurrent = subscriptionInfo?.subscription.tier === plan.tier;
+              const isCurrent = subscriptionInfo?.subscription.subscriptionTier === plan.tier;
               const features = typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features;
               const suggestedFor = plan.suggestedFor ? (typeof plan.suggestedFor === 'string' ? JSON.parse(plan.suggestedFor) : plan.suggestedFor) : [];
 
