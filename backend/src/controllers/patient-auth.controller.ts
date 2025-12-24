@@ -635,7 +635,7 @@ export const getMyConsultations = async (req: PatientAuthRequest, res: Response)
           select: {
             id: true,
             rating: true,
-            comment: true,
+            reviewText: true,
             createdAt: true,
           },
         },

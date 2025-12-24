@@ -29,7 +29,7 @@ interface Consultation {
   review?: {
     id: string;
     rating: number;
-    comment: string;
+    reviewText: string;
   };
   paymentConfirmation?: {
     amount: number;
@@ -273,7 +273,7 @@ export default function MyConsultationsPage() {
                         </svg>
                       ))}
                     </div>
-                    <p className="text-sm text-gray-900">{consultation.review.comment}</p>
+                    <p className="text-sm text-gray-900">{consultation.review.reviewText}</p>
                   </div>
                 )}
 
