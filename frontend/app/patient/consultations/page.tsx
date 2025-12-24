@@ -13,7 +13,7 @@ interface Consultation {
   startedAt: string;
   completedAt?: string;
   chiefComplaint?: string;
-  diagnosis?: string;
+  doctorNotes?: string;
   doctor: {
     id: string;
     fullName: string;
@@ -227,11 +227,11 @@ export default function MyConsultationsPage() {
                   </div>
                 )}
 
-                {/* Diagnosis */}
-                {consultation.diagnosis && (
+                {/* Doctor Notes */}
+                {consultation.doctorNotes && (
                   <div className="mb-3 bg-green-50/50 rounded-xl p-3">
-                    <p className="text-xs text-gray-600 font-medium mb-1">Diagnosis</p>
-                    <p className="text-sm text-gray-900">{consultation.diagnosis}</p>
+                    <p className="text-xs text-gray-600 font-medium mb-1">Doctor Notes</p>
+                    <p className="text-sm text-gray-900">{consultation.doctorNotes}</p>
                   </div>
                 )}
 

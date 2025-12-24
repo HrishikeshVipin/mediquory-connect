@@ -609,7 +609,6 @@ export const getMyConsultations = async (req: PatientAuthRequest, res: Response)
         startedAt: true,
         completedAt: true,
         chiefComplaint: true,
-        diagnosis: true,
         doctorNotes: true,
         doctor: {
           select: {
