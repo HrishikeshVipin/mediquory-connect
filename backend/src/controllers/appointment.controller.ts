@@ -138,6 +138,8 @@ export const createAppointmentRequest = async (req: Request, res: Response) => {
 export const getPendingRequests = async (req: Request, res: Response) => {
   try {
     const doctorId = (req as any).doctorId;
+    console.log('🔍 getPendingRequests - doctorId:', doctorId);
+    console.log('🔍 req.user:', (req as any).user);
     const { page = 1, limit = 10 } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -173,10 +175,13 @@ export const getPendingRequests = async (req: Request, res: Response) => {
       }),
     ]);
 
+    console.log('✅ Found appointments:', requests.length, 'Total:', total);
+    console.log('📋 Appointments data:', JSON.stringify(requests, null, 2));
+
     res.json({
       success: true,
       data: {
-        requests,
+        appointments: requests, // Changed from 'requests' to 'appointments' for consistency
         pagination: {
           page: Number(page),
           limit: Number(limit),
