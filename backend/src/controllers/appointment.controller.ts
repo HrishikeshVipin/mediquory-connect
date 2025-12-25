@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // Doctor Availability Management
 export const getAvailability = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
 
     const doctor = await prisma.doctor.findUnique({
       where: { id: doctorId },
@@ -32,7 +32,7 @@ export const getAvailability = async (req: Request, res: Response) => {
 
 export const updateAvailability = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { availability, defaultSlotDuration } = req.body;
 
     const updated = await prisma.doctor.update({
@@ -137,7 +137,7 @@ export const createAppointmentRequest = async (req: Request, res: Response) => {
 // Doctor gets pending requests
 export const getPendingRequests = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { page = 1, limit = 10 } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -194,7 +194,7 @@ export const getPendingRequests = async (req: Request, res: Response) => {
 // Doctor gets upcoming confirmed appointments
 export const getUpcomingAppointments = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
 
     const appointments = await prisma.appointment.findMany({
       where: {
@@ -233,7 +233,7 @@ export const getUpcomingAppointments = async (req: Request, res: Response) => {
 // Doctor gets past appointments
 export const getPastAppointments = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { page = 1, limit = 10 } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -291,7 +291,7 @@ export const getPastAppointments = async (req: Request, res: Response) => {
 // Doctor accepts request and confirms specific time
 export const acceptRequest = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { id } = req.params;
     const { scheduledTime, duration, message } = req.body;
 
@@ -368,7 +368,7 @@ export const acceptRequest = async (req: Request, res: Response) => {
 // Doctor proposes alternative time
 export const proposeAlternative = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { id } = req.params;
     const { proposedTime, proposedMessage } = req.body;
 
@@ -441,7 +441,7 @@ export const proposeAlternative = async (req: Request, res: Response) => {
 // Doctor rejects request
 export const rejectRequest = async (req: Request, res: Response) => {
   try {
-    const doctorId = (req as any).doctor.id;
+    const doctorId = (req as any).doctorId;
     const { id } = req.params;
     const { rejectionReason } = req.body;
 
@@ -675,8 +675,8 @@ export const declineProposal = async (req: Request, res: Response) => {
 // Cancel appointment (either party)
 export const cancelAppointment = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).doctor?.id || (req as any).patient?.id || (req as any).user?.id;
-    const userType = (req as any).doctor ? 'doctor' : 'patient';
+    const userId = (req as any).doctorId || (req as any).patientId || (req as any).user?.id;
+    const userType = (req as any).doctorId ? 'doctor' : 'patient';
     const { id } = req.params;
     const { cancellationReason } = req.body;
 

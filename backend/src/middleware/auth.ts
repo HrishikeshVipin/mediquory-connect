@@ -216,6 +216,9 @@ export const validatePatientToken = async (
       status: 'PATIENT', // Custom status to identify as patient
     };
 
+    // Add patientId to request for easy access in controllers
+    (req as any).patientId = patient.id;
+
     next();
   } catch (error: any) {
     res.status(500).json({
