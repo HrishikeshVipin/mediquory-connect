@@ -216,7 +216,7 @@ export const doctorLogin = async (req: Request, res: Response): Promise<void> =>
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-origin in production
     });
 
     // Check trial/subscription status
@@ -305,7 +305,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-origin in production
     });
 
     res.status(200).json({
