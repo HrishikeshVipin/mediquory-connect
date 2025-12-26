@@ -55,7 +55,18 @@
       "Bash(git commit:*)",
       "WebFetch(domain:bhishakmed-production.up.railway.app)",
       "WebFetch(domain:unique-fulfillment-production.up.railway.app)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git config:*)",
+      "Bash(git reset:*)",
+      "Bash(git restore:*)",
+      "Bash(set PGPASSWORD:*)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -c \"CREATE DATABASE bhishakmed_local;\")",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -lqt)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\dropdb.exe\" -U postgres --if-exists bhishakmed_local)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\createdb.exe\" -U postgres bhishakmed_local)",
+      "Bash(del apppage.tsx)",
+      "Bash(\"C:\\\\Users\\\\hrish\\\\Downloads\\\\Bhishak_med\\\\New_Model\\\\frontend\\\\app\\\\patient\\\\doctors\\\\[doctorId]\\\\page.tsx\")",
+      "Bash(npm run build:*)"
     ]
   }
 }

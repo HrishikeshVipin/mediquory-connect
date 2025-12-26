@@ -28,6 +28,25 @@ export default function DoctorSearchPage() {
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Check if patient signup is enabled
+  useEffect(() => {
+    const checkPatientSignupEnabled = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/system-settings/public/ENABLE_PATIENT_SIGNUP`);
+        const data = await response.json();
+        const isEnabled = data.success && data.data?.value === true;
+
+        if (!isEnabled) {
+          router.replace('/patient/coming-soon');
+        }
+      } catch (error) {
+        console.error('Failed to check patient signup setting:', error);
+      }
+    };
+
+    checkPatientSignupEnabled();
+  }, [router]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     doctorType: '',

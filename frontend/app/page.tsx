@@ -18,10 +18,29 @@ export default function Home() {
 
   // Redirect to doctor-portal if patient signup is disabled
   useEffect(() => {
-    const isPatientSignupEnabled = process.env.NEXT_PUBLIC_ENABLE_PATIENT_SIGNUP === 'true';
-    if (!isPatientSignupEnabled) {
-      router.replace('/doctor-portal');
-    }
+    const checkPatientSignupEnabled = async () => {
+      try {
+        // Check database setting via API (falls back to env variable on backend)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/system-settings/public/ENABLE_PATIENT_SIGNUP`);
+        const data = await response.json();
+
+        // Backend returns boolean value for BOOLEAN type settings
+        const isEnabled = data.success && data.data?.value === true;
+
+        if (!isEnabled) {
+          router.replace('/doctor-portal');
+        }
+      } catch (error) {
+        console.error('Failed to check patient signup setting:', error);
+        // Fallback to env variable if API fails
+        const isPatientSignupEnabled = process.env.NEXT_PUBLIC_ENABLE_PATIENT_SIGNUP === 'true';
+        if (!isPatientSignupEnabled) {
+          router.replace('/doctor-portal');
+        }
+      }
+    };
+
+    checkPatientSignupEnabled();
   }, [router]);
 
   // Mouse tracking for interactive elements
@@ -370,6 +389,7 @@ export default function Home() {
                   ? `perspective(1000px) rotateY(${(mousePosition.x - window.innerWidth / 2) * 0.01}deg)`
                   : undefined,
               }}
+              suppressHydrationWarning
             >
               <div className={`inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-${stat.color}-500 to-${stat.color === 'cyan' ? 'blue' : 'cyan'}-600 rounded-xl mb-4 shadow-lg shadow-${stat.color}-500/30 group-hover:scale-110 transition-transform`}>
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
