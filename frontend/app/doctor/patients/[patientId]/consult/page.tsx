@@ -245,6 +245,25 @@ export default function DoctorConsultationPage() {
       alert(`Patient declined the call: ${data.reason}`);
     });
 
+    // Listen for patient status updates (e.g., activated from waitlist)
+    newSocket.on('patient-status-updated', (data: { patient: any; timestamp: string }) => {
+      console.log('📡 Patient status updated:', data.patient);
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          patient: {
+            ...prev.patient,
+            ...data.patient,
+          },
+        };
+      });
+      // Show alert to doctor
+      if (data.patient.status === 'ACTIVE') {
+        alert(`${data.patient.fullName} has been activated! You can now start video consultations.`);
+      }
+    });
+
     // Listen for new messages and update consultation state
     newSocket.on('receive-message', (message: any) => {
       setConsultation((prev) => {
@@ -279,6 +298,7 @@ export default function DoctorConsultationPage() {
       newSocket.off('user-status-changed');
       newSocket.off('video-call-accepted');
       newSocket.off('video-call-declined');
+      newSocket.off('patient-status-updated');
     };
   };
 

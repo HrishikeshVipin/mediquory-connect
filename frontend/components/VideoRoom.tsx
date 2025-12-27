@@ -32,6 +32,8 @@ export default function VideoRoom({
   const [isAudioOn, setIsAudioOn] = useState(true);
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [currentCameraId, setCurrentCameraId] = useState<string>('');
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
@@ -90,23 +92,47 @@ export default function VideoRoom({
 
         // Join the channel
         await client.join(appId, channel, token, uid);
-        console.log('Joined channel:', channel, 'as', uid);
+        console.log('✅ Joined channel:', channel, 'as UID:', uid, 'Role:', userType);
 
-        // Create and publish local tracks
-        const videoTrack = await AgoraRTC.createCameraVideoTrack();
+        // Get available cameras
+        const devices = await AgoraRTC.getCameras();
+        console.log('📹 Available cameras:', devices);
+        setCameras(devices);
+
+        // Create video track with explicit configuration
+        console.log('🎥 Creating camera video track...');
+        const videoTrack = await AgoraRTC.createCameraVideoTrack({
+          encoderConfig: '720p_3', // 1280x720, 30fps
+        });
+        console.log('✅ Video track created:', videoTrack.getTrackId());
+
+        // Get current camera device
+        const currentDevice = videoTrack.getTrackLabel();
+        setCurrentCameraId(currentDevice);
+        console.log('📸 Using camera:', currentDevice);
+
+        // Create audio track
+        console.log('🎤 Creating microphone audio track...');
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        console.log('✅ Audio track created:', audioTrack.getTrackId());
 
         localVideoTrackRef.current = videoTrack;
         localAudioTrackRef.current = audioTrack;
 
         // Play local video
         if (localVideoRef.current) {
+          console.log('▶️ Playing local video in container...');
           videoTrack.play(localVideoRef.current);
+          console.log('✅ Local video playing');
+        } else {
+          console.error('❌ Local video ref not available');
         }
 
         // Publish tracks
+        console.log('📡 Publishing local tracks to channel...');
         await client.publish([videoTrack, audioTrack]);
-        console.log('Published local tracks');
+        console.log('✅ Published video and audio tracks successfully');
+        console.log('📊 Track states - Video enabled:', videoTrack.enabled, 'Audio enabled:', audioTrack.enabled);
 
         setIsJoined(true);
       } catch (err: any) {
@@ -161,6 +187,33 @@ export default function VideoRoom({
     if (localAudioTrackRef.current) {
       await localAudioTrackRef.current.setEnabled(!isAudioOn);
       setIsAudioOn(!isAudioOn);
+    }
+  };
+
+  const switchCamera = async () => {
+    if (!localVideoTrackRef.current || cameras.length <= 1) return;
+
+    try {
+      console.log('🔄 Switching camera...');
+
+      // Get current camera index
+      const currentLabel = localVideoTrackRef.current.getTrackLabel();
+      const currentIndex = cameras.findIndex(cam => cam.label === currentLabel);
+
+      // Get next camera (loop back to first if at end)
+      const nextIndex = (currentIndex + 1) % cameras.length;
+      const nextCamera = cameras[nextIndex];
+
+      console.log('📸 Switching from:', currentLabel, 'to:', nextCamera.label);
+
+      // Switch to the next camera
+      await localVideoTrackRef.current.setDevice(nextCamera.deviceId);
+      setCurrentCameraId(nextCamera.label);
+
+      console.log('✅ Camera switched successfully to:', nextCamera.label);
+    } catch (error) {
+      console.error('❌ Error switching camera:', error);
+      alert('Failed to switch camera. Please try again.');
     }
   };
 
@@ -239,20 +292,20 @@ export default function VideoRoom({
       </div>
 
       {/* Controls */}
-      <div className="bg-gray-800 px-6 py-4 flex items-center justify-center gap-4">
+      <div className="bg-gray-800 px-6 py-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
         <button
           onClick={toggleAudio}
-          className={`p-4 rounded-full transition-colors ${
+          className={`p-3 sm:p-4 rounded-full transition-colors ${
             isAudioOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
           }`}
           title={isAudioOn ? 'Mute' : 'Unmute'}
         >
           {isAudioOn ? (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           ) : (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
             </svg>
@@ -261,25 +314,38 @@ export default function VideoRoom({
 
         <button
           onClick={toggleVideo}
-          className={`p-4 rounded-full transition-colors ${
+          className={`p-3 sm:p-4 rounded-full transition-colors ${
             isVideoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
           }`}
           title={isVideoOn ? 'Stop Video' : 'Start Video'}
         >
           {isVideoOn ? (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           ) : (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
           )}
         </button>
 
+        {/* Camera Switch Button - Only show if multiple cameras available */}
+        {cameras.length > 1 && (
+          <button
+            onClick={switchCamera}
+            className="p-3 sm:p-4 rounded-full bg-blue-600 hover:bg-blue-700 transition-colors"
+            title="Switch Camera (Front/Back)"
+          >
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        )}
+
         <button
           onClick={handleLeave}
-          className="px-6 py-3 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-semibold"
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-semibold text-sm sm:text-base"
         >
           End Call
         </button>

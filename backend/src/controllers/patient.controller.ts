@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { z } from 'zod';
+import { socketService } from '../services/socket.service';
 
 // Validation schema for creating a patient
 const createPatientSchema = z.object({
@@ -624,6 +625,27 @@ export const activatePatient = async (req: Request, res: Response): Promise<void
       where: { id: doctorId },
       data: { patientsCreated: { increment: 1 } },
     });
+
+    // Emit real-time update if there's an active consultation
+    const activeConsultation = await prisma.consultation.findFirst({
+      where: {
+        patientId: patientId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+
+    if (activeConsultation) {
+      console.log(`📡 Emitting patient-status-updated for consultation: ${activeConsultation.id}`);
+      socketService.emitPatientStatusUpdate(activeConsultation.id, {
+        id: updatedPatient.id,
+        status: updatedPatient.status,
+        fullName: updatedPatient.fullName,
+        phone: updatedPatient.phone,
+        age: updatedPatient.age,
+        gender: updatedPatient.gender,
+      });
+    }
 
     res.status(200).json({
       success: true,

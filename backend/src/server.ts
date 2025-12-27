@@ -23,6 +23,7 @@ import appointmentRoutes from './routes/appointment.routes';
 import systemSettingsRoutes from './routes/system-settings.routes';
 import { initializeChatSocket } from './socket/chat.socket';
 import { notificationService } from './services/notification.service';
+import { socketService } from './services/socket.service';
 import { apiLimiter } from './middleware/rateLimiter';
 
 // Load environment variables
@@ -162,6 +163,9 @@ initializeChatSocket(io);
 
 // Initialize notification service with Socket.io
 notificationService.setSocketIO(io);
+
+// Initialize socket service for real-time updates
+socketService.setSocketIO(io);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
