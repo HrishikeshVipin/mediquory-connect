@@ -51,6 +51,58 @@ class SocketService {
       });
     }
   }
+
+  /**
+   * Emit prescription created/updated event
+   */
+  emitPrescriptionUpdate(consultationId: string, prescription: any) {
+    if (this.io) {
+      console.log(`📡 Emitting prescription-updated to consultation: ${consultationId}`);
+      this.io.to(consultationId).emit('prescription-updated', {
+        prescription,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Emit payment made event (patient paid)
+   */
+  emitPaymentMade(consultationId: string, payment: any) {
+    if (this.io) {
+      console.log(`📡 Emitting payment-made to consultation: ${consultationId}`);
+      this.io.to(consultationId).emit('payment-made', {
+        payment,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Emit payment confirmed event (doctor confirmed)
+   */
+  emitPaymentConfirmed(consultationId: string, payment: any) {
+    if (this.io) {
+      console.log(`📡 Emitting payment-confirmed to consultation: ${consultationId}`);
+      this.io.to(consultationId).emit('payment-confirmed', {
+        payment,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Emit consultation completed event
+   */
+  emitConsultationCompleted(consultationId: string, consultation: any) {
+    if (this.io) {
+      console.log(`📡 Emitting consultation-completed to: ${consultationId}`);
+      this.io.to(consultationId).emit('consultation-completed', {
+        consultation,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 export const socketService = new SocketService();

@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
+import { socketService } from '../services/socket.service';
 
 // Create prescription
 export const createPrescription = async (req: Request, res: Response): Promise<void> => {
@@ -94,6 +95,17 @@ export const createPrescription = async (req: Request, res: Response): Promise<v
     const updatedPrescription = await prisma.prescription.update({
       where: { id: prescription.id },
       data: { pdfPath },
+    });
+
+    // Emit real-time event to consultation room
+    socketService.emitPrescriptionUpdate(consultationId, {
+      id: updatedPrescription.id,
+      diagnosis,
+      medications,
+      instructions,
+      pdfPath: updatedPrescription.pdfPath,
+      serialNumber: updatedPrescription.serialNumber,
+      createdAt: updatedPrescription.createdAt,
     });
 
     res.status(201).json({

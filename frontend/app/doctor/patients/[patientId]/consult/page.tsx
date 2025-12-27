@@ -264,6 +264,50 @@ export default function DoctorConsultationPage() {
       }
     });
 
+    // Listen for prescription updates
+    newSocket.on('prescription-updated', (data: { prescription: any; timestamp: string }) => {
+      console.log('📡 Prescription updated:', data.prescription);
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          prescription: data.prescription,
+        };
+      });
+    });
+
+    // Listen for payment made by patient
+    newSocket.on('payment-made', (data: { payment: any; timestamp: string }) => {
+      console.log('📡 Payment made by patient:', data.payment);
+      // Refresh consultation to show payment confirmation UI
+      startOrGetConsultation();
+    });
+
+    // Listen for payment confirmed by doctor
+    newSocket.on('payment-confirmed', (data: { payment: any; timestamp: string }) => {
+      console.log('📡 Payment confirmed by doctor:', data.payment);
+      // Update consultation state
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'COMPLETED',
+        };
+      });
+    });
+
+    // Listen for consultation completed
+    newSocket.on('consultation-completed', (data: { consultation: any; timestamp: string }) => {
+      console.log('📡 Consultation completed:', data.consultation);
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'COMPLETED',
+        };
+      });
+    });
+
     // Listen for new messages and update consultation state
     newSocket.on('receive-message', (message: any) => {
       setConsultation((prev) => {
@@ -299,6 +343,10 @@ export default function DoctorConsultationPage() {
       newSocket.off('video-call-accepted');
       newSocket.off('video-call-declined');
       newSocket.off('patient-status-updated');
+      newSocket.off('prescription-updated');
+      newSocket.off('payment-made');
+      newSocket.off('payment-confirmed');
+      newSocket.off('consultation-completed');
     };
   };
 

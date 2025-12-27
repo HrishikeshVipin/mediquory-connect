@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
+import { socketService } from '../services/socket.service';
 
 // Upload payment proof (patient)
 export const uploadPaymentProof = async (req: Request, res: Response): Promise<void> => {
@@ -33,6 +34,15 @@ export const uploadPaymentProof = async (req: Request, res: Response): Promise<v
         proofImagePath: file?.path || null,
         confirmedByDoctor: false,
       },
+    });
+
+    // Emit real-time event to consultation room (notify doctor)
+    socketService.emitPaymentMade(consultationId, {
+      id: payment.id,
+      amount: payment.amount,
+      proofImagePath: payment.proofImagePath,
+      confirmedByDoctor: payment.confirmedByDoctor,
+      createdAt: payment.createdAt,
     });
 
     res.status(200).json({
@@ -74,6 +84,29 @@ export const confirmPayment = async (req: Request, res: Response): Promise<void>
         confirmedByDoctor: true,
         confirmedAt: new Date(),
       },
+    });
+
+    // Update consultation status to completed
+    await prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    // Emit real-time event to consultation room (notify patient)
+    socketService.emitPaymentConfirmed(consultationId, {
+      id: payment.id,
+      amount: payment.amount,
+      confirmedByDoctor: payment.confirmedByDoctor,
+      confirmedAt: payment.confirmedAt,
+    });
+
+    // Emit consultation completed event
+    socketService.emitConsultationCompleted(consultationId, {
+      id: consultationId,
+      status: 'COMPLETED',
     });
 
     res.status(200).json({

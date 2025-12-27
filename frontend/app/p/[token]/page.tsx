@@ -50,6 +50,9 @@ export default function PatientAccessPage() {
   const [showIncomingCall, setShowIncomingCall] = useState(false);
   const [incomingCallData, setIncomingCallData] = useState<{ doctorName: string } | null>(null);
 
+  // Prescription notification modal
+  const [showPrescriptionNotification, setShowPrescriptionNotification] = useState(false);
+
   useEffect(() => {
     if (token) {
       fetchConsultation();
@@ -152,6 +155,56 @@ export default function PatientAccessPage() {
       });
     });
 
+    // Listen for prescription updates (doctor created prescription)
+    newSocket.on('prescription-updated', (data: { prescription: any; timestamp: string }) => {
+      console.log('📡 Prescription updated:', data.prescription);
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          prescription: data.prescription,
+        };
+      });
+      // Show prescription notification modal
+      setShowPrescriptionNotification(true);
+      // Refresh to show payment section
+      fetchConsultation();
+    });
+
+    // Listen for payment made by patient (shouldn't happen, but for completeness)
+    newSocket.on('payment-made', (data: { payment: any; timestamp: string }) => {
+      console.log('📡 Payment made:', data.payment);
+      // Refresh consultation
+      fetchConsultation();
+    });
+
+    // Listen for payment confirmed by doctor
+    newSocket.on('payment-confirmed', (data: { payment: any; timestamp: string }) => {
+      console.log('📡 Payment confirmed by doctor:', data.payment);
+      // Update consultation state
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'COMPLETED',
+        };
+      });
+      // Refresh to show download prescription button
+      fetchConsultation();
+    });
+
+    // Listen for consultation completed
+    newSocket.on('consultation-completed', (data: { consultation: any; timestamp: string }) => {
+      console.log('📡 Consultation completed:', data.consultation);
+      setConsultation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'COMPLETED',
+        };
+      });
+    });
+
     newSocket.on('error', (error) => {
       console.error('Socket error:', error);
     });
@@ -168,6 +221,10 @@ export default function PatientAccessPage() {
       newSocket.off('receive-message');
       newSocket.off('user-status-changed');
       newSocket.off('incoming-video-call');
+      newSocket.off('prescription-updated');
+      newSocket.off('payment-made');
+      newSocket.off('payment-confirmed');
+      newSocket.off('consultation-completed');
     };
   };
 
@@ -399,7 +456,7 @@ export default function PatientAccessPage() {
 
         {/* Payment & Prescription Section - Only for Active Patients */}
         {consultation.patient?.status !== 'WAITLISTED' && consultation.prescription && (
-          <div className="mb-6">
+          <div id="payment-section" className="mb-6 scroll-mt-20">
             <PaymentSection
               consultationId={consultation.id}
               doctorName={consultation.doctor.fullName}
@@ -422,48 +479,88 @@ export default function PatientAccessPage() {
         </div>
       </main>
 
-      {/* Incoming Video Call Modal */}
-      {showIncomingCall && incomingCallData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl animate-[bounce_1s_ease-in-out_3]">
+      {/* Prescription Notification Modal - Senior Friendly */}
+      {showPrescriptionNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-8 sm:p-10 max-w-lg w-full shadow-2xl">
             <div className="text-center">
-              {/* Calling animation */}
-              <div className="mb-6 relative">
-                <div className="w-24 h-24 mx-auto bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                  <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+              {/* Success Icon */}
+              <div className="mb-6">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto bg-gradient-to-r from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                  <svg className="w-12 h-12 sm:w-16 sm:h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-32 h-32 bg-green-400/30 rounded-full animate-ping"></div>
                 </div>
               </div>
 
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Incoming Video Call
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+                Prescription Ready!
               </h2>
-              <p className="text-gray-600 mb-6">
-                <span className="font-semibold">{incomingCallData.doctorName}</span> is calling you
+              <p className="text-lg sm:text-xl text-gray-700 mb-8 leading-relaxed">
+                Your doctor has created your prescription.<br />
+                <span className="font-semibold text-blue-600">Please scroll down to make payment</span> and download your prescription.
               </p>
 
-              <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => {
+                  setShowPrescriptionNotification(false);
+                  // Scroll to payment section
+                  setTimeout(() => {
+                    const paymentSection = document.getElementById('payment-section');
+                    if (paymentSection) {
+                      paymentSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }, 300);
+                }}
+                className="w-full py-5 sm:py-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl sm:text-2xl font-bold rounded-2xl transition-all shadow-lg"
+              >
+                OK, Show Payment Section
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming Video Call Modal - Senior Friendly */}
+      {showIncomingCall && incomingCallData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-8 sm:p-10 max-w-lg w-full shadow-2xl">
+            <div className="text-center">
+              {/* Call Icon - Static, no animations */}
+              <div className="mb-6">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                  <svg className="w-12 h-12 sm:w-16 sm:h-16 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                  </svg>
+                </div>
+              </div>
+
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
+                Incoming Video Call
+              </h2>
+              <p className="text-lg sm:text-xl text-gray-700 mb-8">
+                <span className="font-semibold text-blue-600">{incomingCallData.doctorName}</span> is calling you
+              </p>
+
+              {/* Large, easy-to-tap buttons for aged patients */}
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   onClick={handleDeclineCall}
-                  className="px-8 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-full transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+                  className="flex-1 py-5 sm:py-6 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white text-xl sm:text-2xl font-bold rounded-2xl transition-colors shadow-lg flex items-center justify-center gap-3"
                 >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                  <svg className="w-7 h-7 sm:w-8 sm:h-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
                   Decline
                 </button>
                 <button
                   onClick={handleAcceptCall}
-                  className="px-8 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-full transition-all transform hover:scale-105 shadow-lg flex items-center gap-2 animate-pulse"
+                  className="flex-1 py-5 sm:py-6 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white text-xl sm:text-2xl font-bold rounded-2xl transition-colors shadow-lg flex items-center justify-center gap-3"
                 >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-7 h-7 sm:w-8 sm:h-8" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                   </svg>
-                  Accept
+                  Accept Call
                 </button>
               </div>
             </div>
