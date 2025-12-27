@@ -205,15 +205,26 @@ export default function PaymentSection({
 
       {prescriptionId && isPaymentConfirmed && (
         <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-5 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-lg font-bold text-green-900">Payment Confirmed!</p>
+            </div>
+            <p className="text-sm text-green-800">
+              Your prescription is ready to download. You can download it anytime from your "Past Consultations" page.
+            </p>
+          </div>
           <button
             onClick={downloadPrescription}
-            className="w-full px-4 py-2 rounded-md transition-colors bg-green-600 text-white hover:bg-green-700"
+            className="w-full px-6 py-4 rounded-xl transition-all bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-lg shadow-lg hover:scale-105 flex items-center justify-center gap-3"
           >
-            📄 Download Prescription
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download Your Prescription
           </button>
-          <p className="mt-2 text-xs text-green-600 text-center font-medium">
-            ✓ Payment confirmed - Prescription is ready
-          </p>
         </div>
       )}
 

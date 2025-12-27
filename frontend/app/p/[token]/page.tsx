@@ -325,8 +325,27 @@ export default function PatientAccessPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Consultation Completed Message */}
+        {consultation.status === 'COMPLETED' && (
+          <div className="mb-6 bg-green-50 border-2 border-green-200 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-4xl">✅</span>
+              <h3 className="text-2xl font-bold text-green-900">Consultation Completed</h3>
+            </div>
+            <p className="text-green-800 text-lg mb-3">
+              Your consultation with Dr. {consultation.doctor.fullName} has been successfully completed.
+            </p>
+            <div className="bg-green-100 border border-green-300 rounded-lg p-4 mt-4">
+              <p className="text-green-900 font-semibold mb-2">📄 Your Prescription:</p>
+              <p className="text-green-800 text-sm">
+                Scroll down to download your prescription. You can access it anytime from the "Past Consultations" page.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Waitlist Status Message */}
-        {consultation.patient?.status === 'WAITLISTED' && (
+        {consultation.patient?.status === 'WAITLISTED' && consultation.status !== 'COMPLETED' && (
           <div className="mb-6 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-2xl">⏳</span>
@@ -410,38 +429,46 @@ export default function PatientAccessPage() {
         ) : null}
 
         {/* Chat Section */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900">Consultation Chat</h2>
-            {consultation.patient?.status !== 'WAITLISTED' && isVideoActive && (
-              <button
-                onClick={handleVideoLeave}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
-              >
-                Leave Video Call
-              </button>
-            )}
+        {consultation.status !== 'COMPLETED' ? (
+          <div className="bg-white rounded-lg shadow mb-6">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Consultation Chat</h2>
+              {consultation.patient?.status !== 'WAITLISTED' && isVideoActive && (
+                <button
+                  onClick={handleVideoLeave}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
+                >
+                  Leave Video Call
+                </button>
+              )}
+            </div>
+            <div className="p-6">
+              {socket && joined ? (
+                <ChatBox
+                  socket={socket}
+                  consultationId={consultation.id}
+                  userType="patient"
+                  userName="Patient"
+                  initialMessages={consultation.chatMessages || []}
+                />
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                  <p>Connecting to chat...</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="p-6">
-            {socket && joined ? (
-              <ChatBox
-                socket={socket}
-                consultationId={consultation.id}
-                userType="patient"
-                userName="Patient"
-                initialMessages={consultation.chatMessages || []}
-              />
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                <p>Connecting to chat...</p>
-              </div>
-            )}
+        ) : (
+          <div className="bg-gray-50 border-2 border-gray-200 rounded-lg shadow mb-6 p-8 text-center">
+            <div className="text-5xl mb-3">💬</div>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">Chat Closed</h3>
+            <p className="text-gray-600">This consultation has been completed. Chat is no longer available.</p>
           </div>
-        </div>
+        )}
 
-        {/* Vitals and File Upload Section - Only for Active Patients */}
-        {consultation.patient?.status !== 'WAITLISTED' && (
+        {/* Vitals and File Upload Section - Only for Active Patients and Ongoing Consultations */}
+        {consultation.patient?.status !== 'WAITLISTED' && consultation.status !== 'COMPLETED' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <VitalsForm
               patientId={consultation.id}
@@ -474,6 +501,7 @@ export default function PatientAccessPage() {
             <li>• Save this link for future consultations</li>
             <li>• You can access this portal anytime using the same link</li>
             <li>• Your messages are securely stored</li>
+            <li>• If you accidentally deleted your prescription, you can download it again from the "Past Consultations" page in your patient dashboard</li>
             <li>• Contact your doctor directly for emergencies</li>
           </ul>
         </div>
