@@ -3,23 +3,68 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bhishak_postgres
+    container_name: mediquory_postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
-      POSTGRES_USER: bhishak_user
-      POSTGRES_PASSWORD: bhishak_dev_password
-      POSTGRES_DB: bhishak_med
-      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bhishak_user -d bhishak_med"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mediquory_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
+        NEXT_PUBLIC_RAZORPAY_KEY_ID: ${NEXT_PUBLIC_RAZORPAY_KEY_ID}
+        NEXT_PUBLIC_ENABLE_PATIENT_SIGNUP: ${NEXT_PUBLIC_ENABLE_PATIENT_SIGNUP:-false}
+    container_name: mediquory_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3002:3002"
+
+  nginx:
+    image: nginx:alpine
+    container_name: mediquory_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
   postgres_data:
+    driver: local
+  uploads_data:
     driver: local
