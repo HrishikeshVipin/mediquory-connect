@@ -4,6 +4,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Deployment (Live)
+
+### VPS
+- **Provider**: DigitalOcean Bangalore (`blr1`)
+- **Plan**: 4GB RAM / 2 vCPU / 80GB SSD — $24/month
+- **IP**: 165.22.213.29
+- **OS**: Ubuntu 24.04 LTS
+- **Code path**: `/opt/mediquory-connect`
+
+### Live URLs
+| URL | Purpose |
+|-----|---------|
+| https://mediquory.workhrishi.in | Frontend (Next.js) |
+| https://mediquory-api.workhrishi.in | Backend API (Express) |
+
+### Cloudflare Tunnel
+- **Tunnel name**: mediquory
+- **Tunnel ID**: `29d64841-87cb-4e45-9036-6cb1e836a79a`
+- **Config**: `C:\Users\hrish\.cloudflared\config-mediquory.yml`
+- **Auto-start**: `C:\Users\hrish\.cloudflared\start-all-tunnels.bat` (in Windows Startup folder)
+
+### Docker Stack
+- `mediquory_postgres` — PostgreSQL 16 (port 5432 internal)
+- `mediquory_backend` — Express API (port 5000)
+- `mediquory_frontend` — Next.js (port 3002)
+- `mediquory_nginx` — Nginx reverse proxy (port 80)
+- `uploads_data` — Docker volume for file uploads (KYC, reports, signatures)
+- `postgres_data` — Docker volume for database
+
+### Common VPS Commands
+```bash
+ssh root@165.22.213.29
+cd /opt/mediquory-connect
+
+docker compose ps                          # Check container status
+docker compose logs -f backend             # Backend logs
+docker compose logs -f frontend            # Frontend logs
+docker compose up -d --build               # Rebuild and restart all
+docker compose restart backend             # Restart backend only
+docker exec mediquory_backend npx ts-node prisma/seed.ts  # Re-seed DB
+```
+
+### Deploy Updates
+```bash
+# On VPS:
+cd /opt/mediquory-connect && git pull && docker compose up -d --build
+```
+
+### Default Credentials (change after login)
+- Admin: `admin@mediquory.com` / `admin123`
+- Test Doctor: `doctor@test.com` / `doctor123`
+
+### Pending
+- Razorpay keys (awaiting website approval)
+- Rename "Bhishak Med" → "Mediquory Connect" in codebase
+
+---
+
 ## Project Overview
 
 **Mediquory Connect** (Bhishak Med) is a production-ready telemedicine platform enabling doctors to conduct online consultations with patients via chat and video. The application features a monorepo architecture with separated frontend (Next.js) and backend (Express.js) services.
