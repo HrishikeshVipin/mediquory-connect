@@ -14,7 +14,7 @@ RUN npx prisma generate
 # Copy source and build
 COPY tsconfig.json ./
 COPY src ./src/
-COPY assets ./assets/ 2>/dev/null || true
+COPY assets ./assets/
 
 RUN npm run build
 
