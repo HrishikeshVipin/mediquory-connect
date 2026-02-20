@@ -60,7 +60,7 @@ const signupSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number'),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number'),
   specialization: z.string().min(2, 'Specialization is required'),
-  doctorType: z.enum(['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY', 'OTHERS']).default('ALLOPATHY'),
+  doctorType: z.enum(['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY', 'OTHERS']).optional(),
   doctorTypeOther: z.string().optional(),
 
   // Step 2: Registration Details
