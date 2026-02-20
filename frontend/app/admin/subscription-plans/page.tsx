@@ -354,7 +354,7 @@ export default function AdminSubscriptionPlansPage() {
               </div>
               <p className="text-3xl font-bold text-blue-600 mb-4">₹{(plan.price / 100).toLocaleString()}</p>
               <ul className="space-y-2 text-sm text-gray-600">
-                {plan.features.map((feature, idx) => (
+                {(plan.features || []).map((feature, idx) => (
                   <li key={idx} className="flex items-start">
                     <span className="text-green-600 mr-2">✓</span>
                     <span>{feature}</span>
