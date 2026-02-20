@@ -59,6 +59,78 @@ cd /opt/mediquory-connect && git pull && docker compose up -d --build
 ### Pending
 - Razorpay keys (awaiting website approval)
 - Rename "Bhishak Med" → "Mediquory Connect" in codebase
+- Test full doctor + patient flow end to end
+
+---
+
+## Flutter Doctor App (Planned — Not Started)
+
+### Overview
+Native Flutter mobile app for doctors consuming the existing backend API.
+
+### Location
+`mobile/` subfolder inside the repo (not yet created)
+
+### Create Project
+```bash
+cd "C:\Users\hrish\Downloads\New_Mediquory_Connect"
+flutter create mobile --org com.mediquory --project-name mediquory_doctor
+```
+
+### Planned Structure
+```
+mobile/
+├── lib/
+│   ├── core/
+│   │   ├── api/           ← Dio client + interceptors (JWT Bearer token)
+│   │   ├── models/        ← Data models
+│   │   ├── providers/     ← Riverpod providers
+│   │   └── utils/         ← Constants, helpers
+│   └── features/
+│       ├── auth/          ← Login, signup, pending verification screen
+│       ├── dashboard/     ← Home, stats, unread count
+│       ├── patients/      ← Patient list, detail, activate waitlisted
+│       ├── consultation/  ← Chat (Socket.io) + video call (Agora)
+│       ├── prescriptions/ ← Create, view, PDF download
+│       ├── appointments/  ← Requests, upcoming, history
+│       ├── profile/       ← Photo upload, digital signature
+│       └── notifications/ ← Notification list + badge count
+```
+
+### Key Packages
+- `dio` — HTTP client
+- `flutter_riverpod` — State management
+- `socket_io_client` — Real-time chat + notifications
+- `agora_rtc_engine` — Video calls
+- `go_router` — Navigation
+- `image_picker` — Profile photo + signature upload
+- `razorpay_flutter` — Subscription payments
+- `cached_network_image` — Profile images
+- `permission_handler` — Camera + microphone permissions
+- `shared_preferences` — JWT token storage
+
+### Backend API Base URL
+`https://mediquory-api.workhrishi.in/api`
+
+### Auth
+JWT via `Authorization: Bearer <token>` header (mobile can't use httpOnly cookies)
+
+### Socket.io URL
+`https://mediquory-api.workhrishi.in`
+
+### Agora
+- App ID: `6439adfae49c4ed6bb81f08d2aa2c79b`
+- Doctor UID: `1000000`, Patient UID: `2000000`
+
+### Screens Priority (MVP)
+1. Login
+2. Dashboard (stats + unread chats)
+3. Patient list + detail
+4. Chat (consultation)
+5. Video call
+6. Create prescription
+7. Notifications
+8. Profile
 
 ---
 
