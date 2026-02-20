@@ -121,7 +121,8 @@ model Doctor {
   chatNotifications  Boolean @default(true)
 
   // Phase 2: Doctor Discovery & Profile
-  doctorType      String   @default("ALLOPATHY") // "ALLOPATHY" | "AYURVEDA" | "HOMEOPATHY"
+  doctorType      String   @default("ALLOPATHY") // "ALLOPATHY" | "AYURVEDA" | "HOMEOPATHY" | "OTHERS"
+  doctorTypeOther String?  // Free text when doctorType = "OTHERS"
   subspecialty    String[] // Array of sub-specializations
   languagesSpoken String[] // ["English", "Hindi", "Malayalam"]
   yearsExperience Int?
@@ -235,6 +236,7 @@ model PatientHistory {
   smoking            String? // "Never" | "Former" | "Current"
   alcohol            String? // "Never" | "Occasional" | "Regular"
   occupation         String? // Relevant for occupational health context
+  caseNotes          String? @db.Text // Detailed case notes, no character limit (psychiatry etc.)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

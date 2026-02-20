@@ -60,6 +60,8 @@ const signupSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number'),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number'),
   specialization: z.string().min(2, 'Specialization is required'),
+  doctorType: z.enum(['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY', 'OTHERS']).default('ALLOPATHY'),
+  doctorTypeOther: z.string().optional(),
 
   // Step 2: Registration Details
   registrationType: z.enum(['STATE_MEDICAL_COUNCIL', 'NATIONAL_MEDICAL_COMMISSION']),
@@ -90,6 +92,7 @@ export default function DoctorSignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isOtherSpecialization, setIsOtherSpecialization] = useState(false);
+  const [isOtherDoctorType, setIsOtherDoctorType] = useState(false);
 
   const {
     register,
@@ -101,6 +104,9 @@ export default function DoctorSignupPage() {
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
     mode: 'onChange',
+    defaultValues: {
+      doctorType: 'ALLOPATHY',
+    },
   });
 
   const registrationType = watch('registrationType');
@@ -173,6 +179,10 @@ export default function DoctorSignupPage() {
       formData.append('password', data.password);
       formData.append('phone', data.phone);
       formData.append('specialization', data.specialization);
+      formData.append('doctorType', data.doctorType || 'ALLOPATHY');
+      if (data.doctorTypeOther) {
+        formData.append('doctorTypeOther', data.doctorTypeOther);
+      }
       formData.append('registrationType', data.registrationType);
       formData.append('registrationNo', data.registrationNo);
       if (data.registrationState) {
@@ -370,6 +380,53 @@ export default function DoctorSignupPage() {
                           type="text"
                           className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                           placeholder="Please specify your specialization"
+                          autoFocus
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* System of Medicine */}
+                  <div>
+                    <label className="block text-sm font-medium text-blue-900 mb-3">System of Medicine</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: 'ALLOPATHY', label: 'Allopathy' },
+                        { value: 'AYURVEDA', label: 'Ayurveda' },
+                        { value: 'HOMEOPATHY', label: 'Homoeopathy' },
+                        { value: 'OTHERS', label: 'Others' },
+                      ].map((opt) => (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center p-3 border rounded-xl cursor-pointer transition-colors ${
+                            watch('doctorType') === opt.value
+                              ? 'border-blue-500 bg-blue-50/60'
+                              : 'border-cyan-200/50 bg-white/50 hover:border-blue-400/60'
+                          }`}
+                        >
+                          <input
+                            {...register('doctorType')}
+                            type="radio"
+                            value={opt.value}
+                            onChange={(e) => {
+                              setValue('doctorType', e.target.value as any);
+                              setIsOtherDoctorType(e.target.value === 'OTHERS');
+                            }}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="ml-2 text-gray-900 text-sm font-medium">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Specify field when Others is selected */}
+                    {isOtherDoctorType && (
+                      <div className="mt-3">
+                        <input
+                          {...register('doctorTypeOther')}
+                          type="text"
+                          className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                          placeholder="Please specify (e.g. Unani, Siddha, Naturopathy)"
                           autoFocus
                         />
                       </div>

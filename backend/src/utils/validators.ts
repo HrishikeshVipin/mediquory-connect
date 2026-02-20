@@ -66,6 +66,8 @@ export const doctorSignupSchema = z.object({
   }),
   governmentIdNumber: z.string().min(5, 'Government ID number is required'),
   upiId: z.string().optional(),
+  doctorType: z.enum(['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY', 'OTHERS']).optional(),
+  doctorTypeOther: z.string().optional(),
 });
 
 // Validation to ensure registrationState is provided if registrationType is STATE

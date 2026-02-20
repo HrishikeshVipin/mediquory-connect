@@ -13,6 +13,7 @@ interface Doctor {
   fullName: string;
   specialization: string;
   doctorType: string;
+  doctorTypeOther?: string;
   yearsExperience?: number;
   consultationFee?: number;
   bio?: string;
@@ -191,7 +192,8 @@ export default function DoctorSearchPage() {
               <option value="">All Types</option>
               <option value="ALLOPATHY">Allopathy</option>
               <option value="AYURVEDA">Ayurveda</option>
-              <option value="HOMEOPATHY">Homeopathy</option>
+              <option value="HOMEOPATHY">Homoeopathy</option>
+              <option value="OTHERS">Others</option>
             </select>
 
             <select
@@ -300,7 +302,10 @@ export default function DoctorSearchPage() {
                     </h3>
                     <p className="text-sm text-gray-700 font-medium">{doctor.specialization}</p>
                     <span className="inline-block mt-1 text-xs bg-gradient-to-r from-blue-500 to-cyan-600 text-white px-3 py-1 rounded-full font-medium shadow-sm">
-                      {doctor.doctorType}
+                      {doctor.doctorType === 'ALLOPATHY' ? 'Allopathy'
+                        : doctor.doctorType === 'AYURVEDA' ? 'Ayurveda'
+                        : doctor.doctorType === 'HOMEOPATHY' ? 'Homoeopathy'
+                        : doctor.doctorTypeOther || 'Others'}
                     </span>
                   </div>
                   {doctor.isOnline && (

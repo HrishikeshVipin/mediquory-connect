@@ -1027,6 +1027,7 @@ export const updateCaseSheet = async (req: Request, res: Response): Promise<void
       smoking,
       alcohol,
       occupation,
+      caseNotes,
     } = req.body;
 
     const historyData = {
@@ -1039,6 +1040,7 @@ export const updateCaseSheet = async (req: Request, res: Response): Promise<void
       smoking: smoking ?? undefined,
       alcohol: alcohol ?? undefined,
       occupation: occupation ?? undefined,
+      caseNotes: caseNotes ?? undefined,
     };
 
     const history = await prisma.patientHistory.upsert({

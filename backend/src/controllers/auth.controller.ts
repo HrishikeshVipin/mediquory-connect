@@ -91,6 +91,8 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
         govIdBackPhoto: files.govIdBackPhoto?.[0] ? convertToRelativePath(files.govIdBackPhoto[0].path) : null,
         profilePhoto: convertToRelativePath(files.profilePhoto[0].path),
         upiId: encryptedUpiId, // ENCRYPTED
+        doctorType: validatedData.doctorType || 'ALLOPATHY',
+        doctorTypeOther: validatedData.doctorTypeOther || null,
         trialEndsAt,
         status: 'VERIFIED',
       },

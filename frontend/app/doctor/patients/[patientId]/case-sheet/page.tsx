@@ -27,6 +27,7 @@ interface PatientHistory {
   smoking?: string;
   alcohol?: string;
   occupation?: string;
+  caseNotes?: string;
 }
 
 interface Visit {
@@ -202,7 +203,39 @@ export default function CaseSheetPage() {
           </div>
         </div>
 
-        {/* Section 2 — Patient History (editable) */}
+        {/* Section 2 — Case Notes (free-text, unlimited) */}
+        <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-bold text-blue-900">Case Notes</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Detailed clinical narrative — history of presenting illness, mental state, progress notes, etc.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {saveSuccess && (
+                <span className="text-sm text-green-600 font-medium">Saved</span>
+              )}
+              {saveError && (
+                <span className="text-sm text-red-600">{saveError}</span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-xl transition-all hover:scale-105 text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={history.caseNotes || ''}
+            onChange={(e) => setHistory({ ...history, caseNotes: e.target.value || undefined })}
+            placeholder="Write detailed case notes here — presenting complaint, history, mental state examination, formulation, treatment plan, progress notes... No character limit."
+            rows={12}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-y leading-relaxed font-mono"
+          />
+        </div>
+
+        {/* Section 3 — Patient History (editable) */}
         <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-lg font-bold text-blue-900">Clinical Background</h2>

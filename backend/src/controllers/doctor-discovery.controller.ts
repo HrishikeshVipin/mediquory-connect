@@ -94,6 +94,7 @@ export const searchDoctors = async (req: Request, res: Response): Promise<void> 
           phone: true,
           specialization: true,
           doctorType: true,
+          doctorTypeOther: true,
           subspecialty: true,
           languagesSpoken: true,
           yearsExperience: true,
@@ -332,10 +333,10 @@ export const updateDoctorProfile = async (req: Request, res: Response): Promise<
     } = req.body;
 
     // Validate doctor type if provided
-    if (doctorType && !['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY'].includes(doctorType)) {
+    if (doctorType && !['ALLOPATHY', 'AYURVEDA', 'HOMEOPATHY', 'OTHERS'].includes(doctorType)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid doctor type. Must be ALLOPATHY, AYURVEDA, or HOMEOPATHY',
+        message: 'Invalid doctor type. Must be ALLOPATHY, AYURVEDA, HOMEOPATHY, or OTHERS',
       });
       return;
     }
