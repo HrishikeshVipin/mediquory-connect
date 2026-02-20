@@ -30,8 +30,8 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
 
     const fileErrors = validateFileUploads({
       registrationCertificate: files.registrationCertificate,
-      aadhaarFrontPhoto: files.aadhaarFrontPhoto,
-      aadhaarBackPhoto: files.aadhaarBackPhoto,
+      govIdFrontPhoto: files.govIdFrontPhoto,
+      govIdBackPhoto: files.govIdBackPhoto,
       profilePhoto: files.profilePhoto,
     });
 
@@ -65,7 +65,7 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
     trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
     // Encrypt sensitive data before storing
-    const encryptedAadhaar = encrypt(validatedData.aadhaarNumber);
+    const encryptedGovId = encrypt(validatedData.governmentIdNumber);
     const encryptedUpiId = validatedData.upiId ? encrypt(validatedData.upiId) : null;
 
     // Convert absolute file paths to relative paths for local storage
@@ -84,10 +84,11 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
         registrationType: validatedData.registrationType,
         registrationNo: validatedData.registrationNo,
         registrationState: validatedData.registrationState || null,
-        aadhaarNumber: encryptedAadhaar, // ENCRYPTED
+        governmentIdType: validatedData.governmentIdType,
+        governmentIdNumber: encryptedGovId, // ENCRYPTED
         registrationCertificate: convertToRelativePath(files.registrationCertificate[0].path),
-        aadhaarFrontPhoto: convertToRelativePath(files.aadhaarFrontPhoto[0].path),
-        aadhaarBackPhoto: convertToRelativePath(files.aadhaarBackPhoto[0].path),
+        govIdFrontPhoto: convertToRelativePath(files.govIdFrontPhoto[0].path),
+        govIdBackPhoto: files.govIdBackPhoto?.[0] ? convertToRelativePath(files.govIdBackPhoto[0].path) : null,
         profilePhoto: convertToRelativePath(files.profilePhoto[0].path),
         upiId: encryptedUpiId, // ENCRYPTED
         trialEndsAt,

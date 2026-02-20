@@ -66,13 +66,16 @@ const signupSchema = z.object({
   registrationNo: z.string().min(5, 'Registration number is required'),
   registrationState: z.string().optional(),
 
-  // Step 3: Aadhaar
-  aadhaarNumber: z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits'),
+  // Step 3: Government ID
+  governmentIdType: z.enum(['PAN_CARD', 'VOTER_ID', 'DRIVING_LICENSE', 'PASSPORT'], {
+    errorMap: () => ({ message: 'Please select a government ID type' }),
+  }),
+  governmentIdNumber: z.string().min(5, 'Government ID number is required'),
 
   // Step 4: Documents
   registrationCertificate: z.any(),
-  aadhaarFrontPhoto: z.any(),
-  aadhaarBackPhoto: z.any(),
+  govIdFrontPhoto: z.any(),
+  govIdBackPhoto: z.any().optional(),
   profilePhoto: z.any(),
 
   // Step 5: Payment (optional)
@@ -120,13 +123,12 @@ export default function DoctorSignupPage() {
         fieldsToValidate.push('registrationState');
       }
     } else if (currentStep === 3) {
-      fieldsToValidate = ['aadhaarNumber'];
+      fieldsToValidate = ['governmentIdType', 'governmentIdNumber'];
     } else if (currentStep === 4) {
       const formData = watch();
       const missingFiles = [];
       if (!formData.registrationCertificate?.[0]) missingFiles.push('Registration Certificate');
-      if (!formData.aadhaarFrontPhoto?.[0]) missingFiles.push('Aadhaar Front Photo');
-      if (!formData.aadhaarBackPhoto?.[0]) missingFiles.push('Aadhaar Back Photo');
+      if (!formData.govIdFrontPhoto?.[0]) missingFiles.push('Government ID Front Photo');
       if (!formData.profilePhoto?.[0]) missingFiles.push('Profile Photo');
 
       if (missingFiles.length > 0) {
@@ -155,8 +157,7 @@ export default function DoctorSignupPage() {
 
       const missingFiles = [];
       if (!data.registrationCertificate?.[0]) missingFiles.push('Registration Certificate');
-      if (!data.aadhaarFrontPhoto?.[0]) missingFiles.push('Aadhaar Front Photo');
-      if (!data.aadhaarBackPhoto?.[0]) missingFiles.push('Aadhaar Back Photo');
+      if (!data.govIdFrontPhoto?.[0]) missingFiles.push('Government ID Front Photo');
       if (!data.profilePhoto?.[0]) missingFiles.push('Profile Photo');
 
       if (missingFiles.length > 0) {
@@ -177,22 +178,21 @@ export default function DoctorSignupPage() {
       if (data.registrationState) {
         formData.append('registrationState', data.registrationState);
       }
-      formData.append('aadhaarNumber', data.aadhaarNumber);
+      formData.append('governmentIdType', data.governmentIdType);
+      formData.append('governmentIdNumber', data.governmentIdNumber);
 
       formData.append('registrationCertificate', data.registrationCertificate[0]);
-      formData.append('aadhaarFrontPhoto', data.aadhaarFrontPhoto[0]);
-      formData.append('aadhaarBackPhoto', data.aadhaarBackPhoto[0]);
+      formData.append('govIdFrontPhoto', data.govIdFrontPhoto[0]);
+      if (data.govIdBackPhoto?.[0]) {
+        formData.append('govIdBackPhoto', data.govIdBackPhoto[0]);
+      }
       formData.append('profilePhoto', data.profilePhoto[0]);
 
       if (data.upiId) {
         formData.append('upiId', data.upiId);
       }
 
-      await axios.post(`${API_URL}/auth/doctor/signup`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await axios.post(`${API_URL}/auth/doctor/signup`, formData);
 
       alert('Registration successful! Your application is under review. You will be notified once verified.');
       router.push('/doctor/login');
@@ -213,7 +213,7 @@ export default function DoctorSignupPage() {
     }
   };
 
-  const stepLabels = ['Basic', 'Registration', 'Aadhaar', 'Documents', 'Payment'];
+  const stepLabels = ['Basic', 'Registration', 'Gov ID', 'Documents', 'Payment'];
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/40">
@@ -437,23 +437,36 @@ export default function DoctorSignupPage() {
                 </div>
               )}
 
-              {/* Step 3: Aadhaar */}
+              {/* Step 3: Government ID */}
               {currentStep === 3 && (
                 <div className="space-y-4">
-                  <h3 className="text-xl font-semibold text-blue-900 mb-4">Aadhaar Verification</h3>
+                  <h3 className="text-xl font-semibold text-blue-900 mb-4">Government ID Verification</h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-2">Aadhaar Number</label>
+                    <label className="block text-sm font-medium text-blue-900 mb-2">ID Type <span className="text-red-500">*</span></label>
+                    <select
+                      {...register('governmentIdType')}
+                      className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    >
+                      <option value="">Select Government ID Type</option>
+                      <option value="PAN_CARD">PAN Card</option>
+                      <option value="VOTER_ID">Voter ID</option>
+                      <option value="DRIVING_LICENSE">Driving License</option>
+                      <option value="PASSPORT">Passport</option>
+                    </select>
+                    {errors.governmentIdType && <p className="mt-2 text-sm text-red-600 font-medium">{errors.governmentIdType.message}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-blue-900 mb-2">ID Number <span className="text-red-500">*</span></label>
                     <input
-                      {...register('aadhaarNumber')}
+                      {...register('governmentIdNumber')}
                       type="text"
-                      maxLength={12}
                       className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                      placeholder="123456789012"
-                      autoFocus
+                      placeholder="Enter your ID number"
                     />
-                    {errors.aadhaarNumber && <p className="mt-2 text-sm text-red-600 font-medium">{errors.aadhaarNumber.message}</p>}
-                    <p className="mt-2 text-sm text-gray-600">Your Aadhaar will be used for identity verification</p>
+                    {errors.governmentIdNumber && <p className="mt-2 text-sm text-red-600 font-medium">{errors.governmentIdNumber.message}</p>}
+                    <p className="mt-2 text-sm text-gray-600">Your government ID will be used for identity verification</p>
                   </div>
                 </div>
               )}
@@ -483,10 +496,10 @@ export default function DoctorSignupPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-blue-900 mb-2">
-                      Aadhaar Front Photo <span className="text-red-500">*</span>
+                      Government ID Front Photo <span className="text-red-500">*</span>
                     </label>
                     <input
-                      {...register('aadhaarFrontPhoto')}
+                      {...register('govIdFrontPhoto')}
                       type="file"
                       accept="image/*"
                       className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gradient-to-r file:from-blue-500 file:to-cyan-600 file:text-white file:font-medium hover:file:from-blue-600 hover:file:to-cyan-700 file:cursor-pointer"
@@ -496,15 +509,15 @@ export default function DoctorSignupPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-blue-900 mb-2">
-                      Aadhaar Back Photo <span className="text-red-500">*</span>
+                      Government ID Back Photo <span className="text-gray-500 text-xs font-normal">(Optional)</span>
                     </label>
                     <input
-                      {...register('aadhaarBackPhoto')}
+                      {...register('govIdBackPhoto')}
                       type="file"
                       accept="image/*"
                       className="w-full px-4 py-3 border border-cyan-200/50 bg-white/50 backdrop-blur-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gradient-to-r file:from-blue-500 file:to-cyan-600 file:text-white file:font-medium hover:file:from-blue-600 hover:file:to-cyan-700 file:cursor-pointer"
                     />
-                    <p className="mt-2 text-sm text-gray-600">Clear photo of back side (Max 10MB)</p>
+                    <p className="mt-2 text-sm text-gray-600">Clear photo of back side, if applicable (Max 10MB)</p>
                   </div>
 
                   <div>

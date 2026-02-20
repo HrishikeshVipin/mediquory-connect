@@ -61,9 +61,10 @@ export const doctorSignupSchema = z.object({
   registrationType: z.enum([REGISTRATION_TYPE.STATE, REGISTRATION_TYPE.NATIONAL]),
   registrationNo: z.string().min(5, 'Registration number is required'),
   registrationState: z.string().optional(),
-  aadhaarNumber: z
-    .string()
-    .regex(/^\d{12}$/, 'Aadhaar number must be exactly 12 digits'),
+  governmentIdType: z.enum(['PAN_CARD', 'VOTER_ID', 'DRIVING_LICENSE', 'PASSPORT'], {
+    errorMap: () => ({ message: 'Please select a valid government ID type' }),
+  }),
+  governmentIdNumber: z.string().min(5, 'Government ID number is required'),
   upiId: z.string().optional(),
 });
 
@@ -147,17 +148,17 @@ export const validateDoctorVerification = (data: z.infer<typeof doctorVerificati
   return true;
 };
 
-// Helper function to format Aadhaar number for display (masked)
-export const maskAadhaar = (aadhaar: string): string => {
-  if (aadhaar.length !== 12) return aadhaar;
-  return `XXXX-XXXX-${aadhaar.substring(8)}`;
+// Helper function to mask government ID for display
+export const maskGovernmentId = (idNumber: string): string => {
+  if (idNumber.length <= 4) return idNumber;
+  return `${'X'.repeat(idNumber.length - 4)}${idNumber.substring(idNumber.length - 4)}`;
 };
 
 // Helper function to validate file uploads
 export const validateFileUploads = (files: {
   registrationCertificate?: Express.Multer.File[];
-  aadhaarFrontPhoto?: Express.Multer.File[];
-  aadhaarBackPhoto?: Express.Multer.File[];
+  govIdFrontPhoto?: Express.Multer.File[];
+  govIdBackPhoto?: Express.Multer.File[];
   profilePhoto?: Express.Multer.File[];
 }) => {
   const errors: string[] = [];
@@ -166,12 +167,8 @@ export const validateFileUploads = (files: {
     errors.push('Registration certificate is required');
   }
 
-  if (!files.aadhaarFrontPhoto || files.aadhaarFrontPhoto.length === 0) {
-    errors.push('Aadhaar front photo is required');
-  }
-
-  if (!files.aadhaarBackPhoto || files.aadhaarBackPhoto.length === 0) {
-    errors.push('Aadhaar back photo is required');
+  if (!files.govIdFrontPhoto || files.govIdFrontPhoto.length === 0) {
+    errors.push('Government ID front photo is required');
   }
 
   if (!files.profilePhoto || files.profilePhoto.length === 0) {

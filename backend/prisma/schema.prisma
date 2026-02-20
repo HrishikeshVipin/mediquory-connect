@@ -67,13 +67,14 @@ model Doctor {
   registrationNo    String  // Registration number
   registrationState String? // Required if registrationType is STATE (e.g., "Maharashtra", "Delhi")
 
-  // Aadhaar verification
-  aadhaarNumber String // 12-digit Aadhaar number
+  // Government ID verification
+  governmentIdType   String  @default("PAN_CARD") // PAN_CARD | VOTER_ID | DRIVING_LICENSE | PASSPORT
+  governmentIdNumber String  // Government ID number (encrypted)
 
   // KYC Documents (File paths to uploaded files)
   registrationCertificate String? // Medical registration certificate
-  aadhaarFrontPhoto       String? // Aadhaar card front photo
-  aadhaarBackPhoto        String? // Aadhaar card back photo
+  govIdFrontPhoto         String? // Government ID front photo
+  govIdBackPhoto          String? // Government ID back photo (optional)
   profilePhoto            String? // Doctor's profile photo
   digitalSignature        String? // Doctor's signature image for prescriptions
 

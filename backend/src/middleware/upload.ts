@@ -26,8 +26,8 @@ const doctorKYCStorage = multer.diskStorage({
 
     if (file.fieldname === 'registrationCertificate') {
       subfolder = 'doctor-kyc/registration-certificates';
-    } else if (file.fieldname === 'aadhaarFrontPhoto' || file.fieldname === 'aadhaarBackPhoto') {
-      subfolder = 'doctor-kyc/aadhaar-photos';
+    } else if (file.fieldname === 'govIdFrontPhoto' || file.fieldname === 'govIdBackPhoto') {
+      subfolder = 'doctor-kyc/gov-id-photos';
     } else if (file.fieldname === 'profilePhoto') {
       subfolder = 'doctor-kyc/profile-photos';
     }
@@ -58,10 +58,10 @@ const doctorKYCFileFilter = (
       cb(new Error('Registration certificate must be a PDF or image file (JPG, PNG)'));
     }
   }
-  // Aadhaar and profile photos must be images
+  // Government ID and profile photos must be images
   else if (
-    file.fieldname === 'aadhaarFrontPhoto' ||
-    file.fieldname === 'aadhaarBackPhoto' ||
+    file.fieldname === 'govIdFrontPhoto' ||
+    file.fieldname === 'govIdBackPhoto' ||
     file.fieldname === 'profilePhoto'
   ) {
     if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
@@ -83,8 +83,8 @@ export const uploadDoctorKYC = multer({
   },
 }).fields([
   { name: 'registrationCertificate', maxCount: 1 },
-  { name: 'aadhaarFrontPhoto', maxCount: 1 },
-  { name: 'aadhaarBackPhoto', maxCount: 1 },
+  { name: 'govIdFrontPhoto', maxCount: 1 },
+  { name: 'govIdBackPhoto', maxCount: 1 },
   { name: 'profilePhoto', maxCount: 1 },
 ]);
 
