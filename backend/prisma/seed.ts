@@ -34,13 +34,13 @@ async function main() {
   trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
   // Encrypt sensitive data
-  const encryptedAadhaar = encrypt('123456789012');
+  const encryptedGovId = encrypt('ABCDE1234F');
   const encryptedUpiId = encrypt('doctor@upi');
 
   const testDoctor = await prisma.doctor.upsert({
     where: { email: 'doctor@test.com' },
     update: {
-      aadhaarNumber: encryptedAadhaar,
+      governmentIdNumber: encryptedGovId,
       upiId: encryptedUpiId,
     },
     create: {
@@ -52,7 +52,8 @@ async function main() {
       registrationType: 'NATIONAL_MEDICAL_COMMISSION',
       registrationNo: 'NMC12345',
       registrationState: null,
-      aadhaarNumber: encryptedAadhaar, // ENCRYPTED
+      governmentIdType: 'PAN_CARD',
+      governmentIdNumber: encryptedGovId, // ENCRYPTED
       status: 'VERIFIED', // Pre-verified for testing
       upiId: encryptedUpiId, // ENCRYPTED
       trialEndsAt,
