@@ -75,7 +75,7 @@ export const revealAadhaar = async (req: Request, res: Response): Promise<void> 
         fullName: true,
         email: true,
         status: true, // Need status for contextual access
-        aadhaarNumber: true, // Encrypted
+        governmentIdNumber: true, // Encrypted
       },
     });
 
@@ -98,8 +98,8 @@ export const revealAadhaar = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    // Decrypt Aadhaar number
-    const decryptedAadhaar = decrypt(doctor.aadhaarNumber);
+    // Decrypt Government ID number
+    const decryptedAadhaar = decrypt(doctor.governmentIdNumber);
 
     // Log admin access (CRITICAL for compliance)
     await createAdminAccessLog(req, {

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
-import { doctorVerificationSchema, validateDoctorVerification, maskAadhaar } from '../utils/validators';
+import { doctorVerificationSchema, validateDoctorVerification, maskGovernmentId } from '../utils/validators';
 import { notificationService } from '../services/notification.service';
 
 // Get platform statistics
@@ -160,16 +160,17 @@ export const getPendingDoctors = async (req: Request, res: Response): Promise<vo
         registrationType: true,
         registrationNo: true,
         registrationState: true,
-        aadhaarNumber: true,
+        governmentIdType: true,
+        governmentIdNumber: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Mask Aadhaar numbers
+    // Mask government ID numbers
     const doctorsWithMaskedAadhaar = doctors.map((doctor) => ({
       ...doctor,
-      aadhaarNumber: maskAadhaar(doctor.aadhaarNumber),
+      governmentIdNumber: maskGovernmentId(doctor.governmentIdNumber),
     }));
 
     res.status(200).json({

@@ -62,7 +62,7 @@ export const doctorSignupSchema = z.object({
   registrationNo: z.string().min(5, 'Registration number is required'),
   registrationState: z.string().optional(),
   governmentIdType: z.enum(['PAN_CARD', 'VOTER_ID', 'DRIVING_LICENSE', 'PASSPORT'], {
-    errorMap: () => ({ message: 'Please select a valid government ID type' }),
+    message: 'Please select a valid government ID type',
   }),
   governmentIdNumber: z.string().min(5, 'Government ID number is required'),
   upiId: z.string().optional(),
