@@ -68,7 +68,7 @@ const signupSchema = z.object({
 
   // Step 3: Government ID
   governmentIdType: z.enum(['PAN_CARD', 'VOTER_ID', 'DRIVING_LICENSE', 'PASSPORT'], {
-    errorMap: () => ({ message: 'Please select a government ID type' }),
+    message: 'Please select a government ID type',
   }),
   governmentIdNumber: z.string().min(5, 'Government ID number is required'),
 
