@@ -34,12 +34,34 @@ export default function VideoRoom({
   const [error, setError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [currentCameraId, setCurrentCameraId] = useState<string>('');
+  const [remoteLeftMessage, setRemoteLeftMessage] = useState<string | null>(null);
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRefs = useRef<{ [uid: string]: HTMLDivElement | null }>({});
+  // Keep latest onLeave ref so event handlers always call the current callback
+  const onLeaveRef = useRef(onLeave);
+  useEffect(() => { onLeaveRef.current = onLeave; });
+
+  // Shared cleanup — safe to call from event handlers or handleLeave
+  const cleanup = async () => {
+    if (localVideoTrackRef.current) {
+      localVideoTrackRef.current.stop();
+      localVideoTrackRef.current.close();
+      localVideoTrackRef.current = null;
+    }
+    if (localAudioTrackRef.current) {
+      localAudioTrackRef.current.stop();
+      localAudioTrackRef.current.close();
+      localAudioTrackRef.current = null;
+    }
+    if (clientRef.current) {
+      try { await clientRef.current.leave(); } catch (_) {}
+      clientRef.current = null;
+    }
+  };
 
   // Initialize Agora client
   useEffect(() => {
@@ -63,7 +85,6 @@ export default function VideoRoom({
         // Set up event listeners
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
-          console.log('User published:', user.uid, mediaType);
 
           if (mediaType === 'video') {
             setRemoteUsers((prev) => {
@@ -79,65 +100,90 @@ export default function VideoRoom({
         });
 
         client.on('user-unpublished', (user, mediaType) => {
-          console.log('User unpublished:', user.uid, mediaType);
           if (mediaType === 'video') {
             setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
           }
         });
 
+        // Auto-end call when the remote user leaves
         client.on('user-left', (user) => {
-          console.log('User left:', user.uid);
+          console.log('Remote user left:', user.uid);
           setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+
+          const otherParty = userType === 'doctor' ? 'Patient' : 'Doctor';
+          setRemoteLeftMessage(`${otherParty} has ended the call.`);
+
+          // Give 2 seconds to show the message, then auto-end
+          setTimeout(async () => {
+            if (!isActive) return;
+            await cleanup();
+            setIsJoined(false);
+            if (onLeaveRef.current) onLeaveRef.current();
+          }, 2000);
         });
 
         // Join the channel
         await client.join(appId, channel, token, uid);
-        console.log('✅ Joined channel:', channel, 'as UID:', uid, 'Role:', userType);
 
         // Get available cameras
         const devices = await AgoraRTC.getCameras();
-        console.log('📹 Available cameras:', devices);
         setCameras(devices);
 
-        // Create video track with explicit configuration
-        console.log('🎥 Creating camera video track...');
-        const videoTrack = await AgoraRTC.createCameraVideoTrack({
-          encoderConfig: '720p_3', // 1280x720, 30fps
-        });
-        console.log('✅ Video track created:', videoTrack.getTrackId());
+        // Try to create video track — fall back to audio-only if no camera
+        let videoTrack: ICameraVideoTrack | null = null;
+        try {
+          videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: '720p_3' });
+          setCurrentCameraId(videoTrack.getTrackLabel());
+          localVideoTrackRef.current = videoTrack;
+        } catch (cameraErr: any) {
+          const isNoCamera =
+            cameraErr.code === 'DEVICE_NOT_FOUND' ||
+            cameraErr.name === 'NotFoundError' ||
+            cameraErr.message?.toLowerCase().includes('device not found') ||
+            cameraErr.message?.toLowerCase().includes('notfounderror');
 
-        // Get current camera device
-        const currentDevice = videoTrack.getTrackLabel();
-        setCurrentCameraId(currentDevice);
-        console.log('📸 Using camera:', currentDevice);
-
-        // Create audio track
-        console.log('🎤 Creating microphone audio track...');
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        console.log('✅ Audio track created:', audioTrack.getTrackId());
-
-        localVideoTrackRef.current = videoTrack;
-        localAudioTrackRef.current = audioTrack;
-
-        // Play local video
-        if (localVideoRef.current) {
-          console.log('▶️ Playing local video in container...');
-          videoTrack.play(localVideoRef.current);
-          console.log('✅ Local video playing');
-        } else {
-          console.error('❌ Local video ref not available');
+          if (isNoCamera) {
+            console.warn('No camera found — joining audio-only');
+            setIsVideoOn(false);
+          } else {
+            throw cameraErr; // unexpected camera error — surface it
+          }
         }
 
-        // Publish tracks
-        console.log('📡 Publishing local tracks to channel...');
-        await client.publish([videoTrack, audioTrack]);
-        console.log('✅ Published video and audio tracks successfully');
-        console.log('📊 Track states - Video enabled:', videoTrack.enabled, 'Audio enabled:', audioTrack.enabled);
+        // Create audio track
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        localAudioTrackRef.current = audioTrack;
+
+        // Play local video if we have a camera
+        if (videoTrack && localVideoRef.current) {
+          videoTrack.play(localVideoRef.current);
+        }
+
+        // Publish available tracks
+        const tracksToPublish = [
+          ...(videoTrack ? [videoTrack] : []),
+          audioTrack,
+        ];
+        await client.publish(tracksToPublish);
 
         setIsJoined(true);
       } catch (err: any) {
         console.error('Error initializing video call:', err);
-        setError(`Failed to join video call: ${err.message}`);
+
+        // User-friendly error messages
+        if (
+          err.name === 'NotAllowedError' ||
+          err.message?.toLowerCase().includes('permission')
+        ) {
+          setError('Camera/microphone permission denied. Please allow access in your browser settings and retry.');
+        } else if (
+          err.code === 'DEVICE_NOT_FOUND' ||
+          err.name === 'NotFoundError'
+        ) {
+          setError('No microphone found. Please connect a microphone and retry.');
+        } else {
+          setError(`Failed to join video call: ${err.message}`);
+        }
       }
     };
 
@@ -146,22 +192,6 @@ export default function VideoRoom({
     // Cleanup on unmount
     return () => {
       isActive = false;
-      const cleanup = async () => {
-        if (localVideoTrackRef.current) {
-          localVideoTrackRef.current.stop();
-          localVideoTrackRef.current.close();
-          localVideoTrackRef.current = null;
-        }
-        if (localAudioTrackRef.current) {
-          localAudioTrackRef.current.stop();
-          localAudioTrackRef.current.close();
-          localAudioTrackRef.current = null;
-        }
-        if (clientRef.current) {
-          await clientRef.current.leave();
-          clientRef.current = null;
-        }
-      };
       cleanup();
     };
   }, [appId, channel, token, uid]);
@@ -194,42 +224,21 @@ export default function VideoRoom({
     if (!localVideoTrackRef.current || cameras.length <= 1) return;
 
     try {
-      console.log('🔄 Switching camera...');
-
-      // Get current camera index
       const currentLabel = localVideoTrackRef.current.getTrackLabel();
       const currentIndex = cameras.findIndex(cam => cam.label === currentLabel);
-
-      // Get next camera (loop back to first if at end)
       const nextIndex = (currentIndex + 1) % cameras.length;
       const nextCamera = cameras[nextIndex];
-
-      console.log('📸 Switching from:', currentLabel, 'to:', nextCamera.label);
-
-      // Switch to the next camera
       await localVideoTrackRef.current.setDevice(nextCamera.deviceId);
       setCurrentCameraId(nextCamera.label);
-
-      console.log('✅ Camera switched successfully to:', nextCamera.label);
     } catch (error) {
-      console.error('❌ Error switching camera:', error);
+      console.error('Error switching camera:', error);
       alert('Failed to switch camera. Please try again.');
     }
   };
 
   const handleLeave = async () => {
     try {
-      if (localVideoTrackRef.current) {
-        localVideoTrackRef.current.stop();
-        localVideoTrackRef.current.close();
-      }
-      if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.stop();
-        localAudioTrackRef.current.close();
-      }
-      if (clientRef.current) {
-        await clientRef.current.leave();
-      }
+      await cleanup();
       setIsJoined(false);
       if (onLeave) onLeave();
     } catch (err) {
@@ -256,6 +265,17 @@ export default function VideoRoom({
     <div className="bg-gray-900 rounded-lg overflow-hidden">
       {/* Video Grid */}
       <div className="relative min-h-[500px]">
+        {/* Remote left banner */}
+        {remoteLeftMessage && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black bg-opacity-70">
+            <div className="text-center text-white">
+              <div className="text-5xl mb-4">📵</div>
+              <p className="text-xl font-semibold">{remoteLeftMessage}</p>
+              <p className="text-sm text-gray-400 mt-2">Ending call...</p>
+            </div>
+          </div>
+        )}
+
         {/* Remote Videos */}
         {remoteUsers.length > 0 ? (
           <div className={`grid ${remoteUsers.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-2 h-full`}>
@@ -277,14 +297,32 @@ export default function VideoRoom({
           <div className="flex items-center justify-center h-[500px] text-gray-400">
             <div className="text-center">
               <div className="text-6xl mb-4">👤</div>
-              <p className="text-lg">Waiting for {userType === 'doctor' ? 'patient' : 'doctor'} to join...</p>
+              {!isJoined ? (
+                <p className="text-lg">Connecting...</p>
+              ) : (
+                <>
+                  <p className="text-lg">Waiting for {userType === 'doctor' ? 'patient' : 'doctor'} to join...</p>
+                  {!isVideoOn && (
+                    <p className="text-sm text-yellow-400 mt-2">No camera detected — audio only</p>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
 
         {/* Local Video (Picture-in-Picture) */}
         <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-700 shadow-lg">
-          <div ref={localVideoRef} className="w-full h-full" />
+          {isVideoOn ? (
+            <div ref={localVideoRef} className="w-full h-full" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <div className="text-2xl">🎤</div>
+                <p className="text-xs mt-1">Audio only</p>
+              </div>
+            </div>
+          )}
           <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-white text-xs">
             You ({userName})
           </div>
@@ -314,10 +352,15 @@ export default function VideoRoom({
 
         <button
           onClick={toggleVideo}
+          disabled={!localVideoTrackRef.current}
           className={`p-3 sm:p-4 rounded-full transition-colors ${
-            isVideoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+            !localVideoTrackRef.current
+              ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+              : isVideoOn
+              ? 'bg-gray-700 hover:bg-gray-600'
+              : 'bg-red-600 hover:bg-red-700'
           }`}
-          title={isVideoOn ? 'Stop Video' : 'Start Video'}
+          title={!localVideoTrackRef.current ? 'No camera' : isVideoOn ? 'Stop Video' : 'Start Video'}
         >
           {isVideoOn ? (
             <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -331,7 +374,7 @@ export default function VideoRoom({
         </button>
 
         {/* Camera Switch Button - Only show if multiple cameras available */}
-        {cameras.length > 1 && (
+        {cameras.length > 1 && localVideoTrackRef.current && (
           <button
             onClick={switchCamera}
             className="p-3 sm:p-4 rounded-full bg-blue-600 hover:bg-blue-700 transition-colors"
