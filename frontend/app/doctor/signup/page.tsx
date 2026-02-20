@@ -194,7 +194,7 @@ export default function DoctorSignupPage() {
 
       await axios.post(`${API_URL}/auth/doctor/signup`, formData);
 
-      alert('Registration successful! Your application is under review. You will be notified once verified.');
+      alert('Registration successful! You can now login and start using Mediquory Connect.');
       router.push('/doctor/login');
     } catch (err: any) {
       console.error('Signup error:', err);

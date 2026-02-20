@@ -92,7 +92,7 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
         profilePhoto: convertToRelativePath(files.profilePhoto[0].path),
         upiId: encryptedUpiId, // ENCRYPTED
         trialEndsAt,
-        status: 'PENDING_VERIFICATION',
+        status: 'VERIFIED',
       },
       select: {
         id: true,
@@ -115,9 +115,9 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
         recipientId: admin.id,
         type: 'PENDING_DOCTOR',
         title: '👨‍⚕️ New Doctor Registration',
-        message: `Dr. ${doctor.fullName} (${validatedData.specialization}) has registered and is awaiting verification.`,
+        message: `Dr. ${doctor.fullName} (${validatedData.specialization}) has registered. Please review their documents.`,
         actionUrl: `/admin/doctors/${doctor.id}`,
-        actionText: 'Review Application',
+        actionText: 'Review Documents',
         metadata: {
           doctorId: doctor.id,
           doctorName: doctor.fullName,
@@ -128,7 +128,7 @@ export const doctorSignup = async (req: Request, res: Response): Promise<void> =
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Your application is under review. You will be notified once verified.',
+      message: 'Registration successful! You can now login and start using Mediquory Connect.',
       data: {
         doctor: {
           id: doctor.id,
@@ -211,15 +211,6 @@ export const doctorLogin = async (req: Request, res: Response): Promise<void> =>
     }
 
     // Check doctor status
-    if (doctor.status === 'PENDING_VERIFICATION') {
-      res.status(403).json({
-        success: false,
-        message: 'Your account is pending verification. Please wait for admin approval.',
-        status: doctor.status,
-      });
-      return;
-    }
-
     if (doctor.status === 'REJECTED') {
       res.status(403).json({
         success: false,
