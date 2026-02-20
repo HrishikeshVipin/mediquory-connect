@@ -17,16 +17,17 @@ interface Vitals {
 
 interface PatientVitalsViewProps {
   patientId: string;
+  refreshTrigger?: number;
 }
 
-export default function PatientVitalsView({ patientId }: PatientVitalsViewProps) {
+export default function PatientVitalsView({ patientId, refreshTrigger }: PatientVitalsViewProps) {
   const [vitals, setVitals] = useState<Vitals[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     fetchVitals();
-  }, [patientId]);
+  }, [patientId, refreshTrigger]);
 
   const fetchVitals = async () => {
     try {

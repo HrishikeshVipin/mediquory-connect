@@ -24,6 +24,7 @@ export const saveVitals = async (req: Request, res: Response): Promise<void> => 
         id: true,
         status: true,
         fullName: true,
+        doctorId: true,
       },
     });
 
@@ -57,6 +58,16 @@ export const saveVitals = async (req: Request, res: Response): Promise<void> => 
         notes: notes || null,
       },
     });
+
+    // Emit real-time notification to doctor
+    const io = (req as any).io;
+    if (io && patient.doctorId) {
+      io.to(`doctor-${patient.doctorId}`).emit('vitals-uploaded', {
+        patientId,
+        patientName: patient.fullName,
+        timestamp: new Date(),
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -133,6 +144,11 @@ export const uploadMedicalFile = async (req: Request, res: Response): Promise<vo
     // Verify patient exists
     const patient = await prisma.patient.findUnique({
       where: { id: patientId },
+      select: {
+        id: true,
+        fullName: true,
+        doctorId: true,
+      },
     });
 
     if (!patient) {
@@ -157,6 +173,17 @@ export const uploadMedicalFile = async (req: Request, res: Response): Promise<vo
         })
       )
     );
+
+    // Emit real-time notification to doctor
+    const io = (req as any).io;
+    if (io && patient.doctorId) {
+      io.to(`doctor-${patient.doctorId}`).emit('medical-records-uploaded', {
+        patientId,
+        patientName: patient.fullName,
+        fileCount: uploadedFiles.length,
+        timestamp: new Date(),
+      });
+    }
 
     res.status(201).json({
       success: true,

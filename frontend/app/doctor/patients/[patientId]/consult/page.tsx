@@ -66,6 +66,10 @@ export default function DoctorConsultationPage() {
   const [consultationHistory, setConsultationHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Real-time refresh triggers for child components
+  const [vitalsRefresh, setVitalsRefresh] = useState(0);
+  const [filesRefresh, setFilesRefresh] = useState(0);
+
   // Online presence state
   const [isPatientOnline, setIsPatientOnline] = useState(false);
   const [callingPatient, setCallingPatient] = useState(false);
@@ -314,6 +318,15 @@ export default function DoctorConsultationPage() {
     // ChatBox component handles all message updates via its own socket listener
     // This prevents duplicate listeners and state conflicts
 
+    // Listen for real-time vitals and medical records uploads
+    newSocket.on('vitals-uploaded', () => {
+      setVitalsRefresh((prev) => prev + 1);
+    });
+
+    newSocket.on('medical-records-uploaded', () => {
+      setFilesRefresh((prev) => prev + 1);
+    });
+
     newSocket.on('connect_error', (error) => {
       console.error('❌ Socket connection error:', error);
       // Enable chat anyway after error
@@ -342,6 +355,8 @@ export default function DoctorConsultationPage() {
       newSocket.off('payment-made');
       newSocket.off('payment-confirmed');
       newSocket.off('consultation-completed');
+      newSocket.off('vitals-uploaded');
+      newSocket.off('medical-records-uploaded');
     };
   };
 
@@ -626,6 +641,12 @@ export default function DoctorConsultationPage() {
                   End Consultation
                 </button>
                 <Link
+                  href={`/doctor/patients/${patientId}/case-sheet`}
+                  className="px-4 py-2 text-gray-700 hover:bg-cyan-50/50 rounded-xl border border-cyan-200/50 transition-all hover:scale-105"
+                >
+                  Case Sheet
+                </Link>
+                <Link
                   href="/doctor/patients"
                   className="px-4 py-2 text-gray-700 hover:bg-cyan-50/50 rounded-xl border border-cyan-200/50 transition-all hover:scale-105"
                 >
@@ -741,7 +762,7 @@ export default function DoctorConsultationPage() {
                 <h2 className="text-lg font-semibold text-blue-900">Patient Vitals</h2>
               </div>
               <div className="p-6">
-                <PatientVitalsView patientId={patientId} />
+                <PatientVitalsView patientId={patientId} refreshTrigger={vitalsRefresh} />
               </div>
             </div>
 
@@ -751,7 +772,7 @@ export default function DoctorConsultationPage() {
                 <h2 className="text-lg font-semibold text-blue-900">Medical Records</h2>
               </div>
               <div className="p-6">
-                <PatientFilesView patientId={patientId} />
+                <PatientFilesView patientId={patientId} refreshTrigger={filesRefresh} />
               </div>
             </div>
               </>

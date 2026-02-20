@@ -60,36 +60,34 @@ export default function DoctorDashboard() {
 
   // Subscription info is fetched once on login and can be manually refreshed using the refresh button
 
+  const fetchUnreadChats = async () => {
+    try {
+      const response = await consultationApi.getUnreadConsultations();
+      if (response.success && response.data) {
+        setUnreadChats(response.data.unreadChats);
+        setTotalUnread(response.data.totalUnread);
+      }
+    } catch (error) {
+      console.error('Error fetching unread chats:', error);
+    }
+  };
+
+  const fetchPendingAppointments = async () => {
+    try {
+      const response = await appointmentApi.getPendingRequests({ limit: 100 });
+      if (response.success && response.data?.appointments) {
+        setPendingAppointmentsCount(response.data.appointments.length);
+      }
+    } catch (error) {
+      console.error('Error fetching pending appointments:', error);
+    }
+  };
+
   // Fetch unread chats and set up real-time updates
   useEffect(() => {
     if (!isAuthenticated || role !== 'DOCTOR' || !user?.id) return;
 
-    const fetchUnreadChats = async () => {
-      try {
-        const response = await consultationApi.getUnreadConsultations();
-        if (response.success && response.data) {
-          setUnreadChats(response.data.unreadChats);
-          setTotalUnread(response.data.totalUnread);
-        }
-      } catch (error) {
-        console.error('Error fetching unread chats:', error);
-      }
-    };
-
     fetchUnreadChats();
-
-    // Fetch pending appointments count
-    const fetchPendingAppointments = async () => {
-      try {
-        const response = await appointmentApi.getPendingRequests({ limit: 100 });
-        if (response.success && response.data?.appointments) {
-          setPendingAppointmentsCount(response.data.appointments.length);
-        }
-      } catch (error) {
-        console.error('Error fetching pending appointments:', error);
-      }
-    };
-
     fetchPendingAppointments();
 
     // Connect to socket for real-time updates
@@ -101,14 +99,12 @@ export default function DoctorDashboard() {
     // Listen for new unread messages
     socket.on('new-unread-message', (data: any) => {
       console.log('New unread message notification:', data);
-      // Refresh unread chats
       fetchUnreadChats();
     });
 
     // Listen for messages marked as read (when doctor opens consultation)
     socket.on('messages-marked-read', (data: any) => {
       console.log('Messages marked as read:', data);
-      // Refresh unread chats to remove this consultation from list
       fetchUnreadChats();
     });
 
@@ -124,6 +120,20 @@ export default function DoctorDashboard() {
       socket.off('new-appointment-request');
     };
   }, [isAuthenticated, role, user?.id]);
+
+  // Re-fetch on tab visibility — catches missed socket events when doctor was away
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'DOCTOR') return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadChats();
+        fetchPendingAppointments();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [isAuthenticated, role]);
 
   const handleLogout = async () => {
     try {

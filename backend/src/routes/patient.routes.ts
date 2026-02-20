@@ -11,6 +11,8 @@ import {
   activatePatient,
   toggleVideoCall,
   deletePatient,
+  getCaseSheet,
+  updateCaseSheet,
 } from '../controllers/patient.controller';
 import { createPatientLimiter, patientRegistrationLimiter } from '../middleware/rateLimiter';
 
@@ -23,6 +25,8 @@ router.get('/list', auth, getDoctorPatients);
 router.put('/self-registration-toggle', auth, toggleSelfRegistration);
 router.put('/:patientId/activate', auth, activatePatient);
 router.put('/:patientId/video-call', auth, toggleVideoCall);
+router.get('/:patientId/case-sheet', auth, getCaseSheet);
+router.put('/:patientId/case-sheet', auth, updateCaseSheet);
 router.delete('/:patientId', auth, deletePatient);
 router.get('/:patientId', auth, getPatientById);
 

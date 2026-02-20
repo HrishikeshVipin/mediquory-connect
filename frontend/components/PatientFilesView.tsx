@@ -14,9 +14,10 @@ interface MedicalFile {
 
 interface PatientFilesViewProps {
   patientId: string;
+  refreshTrigger?: number;
 }
 
-export default function PatientFilesView({ patientId }: PatientFilesViewProps) {
+export default function PatientFilesView({ patientId, refreshTrigger }: PatientFilesViewProps) {
   const [files, setFiles] = useState<MedicalFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,7 +25,7 @@ export default function PatientFilesView({ patientId }: PatientFilesViewProps) {
 
   useEffect(() => {
     fetchFiles();
-  }, [patientId]);
+  }, [patientId, refreshTrigger]);
 
   const fetchFiles = async () => {
     try {

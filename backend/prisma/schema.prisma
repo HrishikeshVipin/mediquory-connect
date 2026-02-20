@@ -214,6 +214,27 @@ model Patient {
   appointments   Appointment[]
   reminders      MedicineReminder[]
   referrals      Referral[]
+  history        PatientHistory?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Patient clinical history (pre-treatment background, filled once by doctor)
+model PatientHistory {
+  id        String  @id @default(uuid())
+  patientId String  @unique
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  bloodGroup         String? // "A+", "B-", "O+", "AB+", etc.
+  allergies          String? // Free text: "Penicillin, Sulfa drugs"
+  chronicConditions  String? // "Diabetes Type 2, Hypertension"
+  pastSurgeries      String? // "Appendectomy 2015, ACL repair 2019"
+  familyHistory      String? // "Father - Heart disease, Mother - Diabetes"
+  currentMedications String? // Medications patient was already on before treatment
+  smoking            String? // "Never" | "Former" | "Current"
+  alcohol            String? // "Never" | "Occasional" | "Regular"
+  occupation         String? // Relevant for occupational health context
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -338,6 +338,18 @@ export const patientApi = {
     const { data } = await api.get<ApiResponse<{ files: any[] }>>(`/doctor/patients/${patientId}/files`);
     return data;
   },
+
+  // Get patient case sheet (demographics + history + visit timeline)
+  getCaseSheet: async (patientId: string) => {
+    const { data } = await api.get<ApiResponse<any>>(`/patients/${patientId}/case-sheet`);
+    return data;
+  },
+
+  // Update patient history (upsert)
+  updateCaseSheet: async (patientId: string, historyData: Record<string, string>) => {
+    const { data } = await api.put<ApiResponse<any>>(`/patients/${patientId}/case-sheet`, historyData);
+    return data;
+  },
 };
 
 // Consultation API

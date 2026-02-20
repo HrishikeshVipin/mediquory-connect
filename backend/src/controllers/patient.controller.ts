@@ -903,3 +903,157 @@ export const deletePatient = async (req: Request, res: Response): Promise<void> 
     });
   }
 };
+
+// Get patient case sheet (demographics + history + visit timeline)
+export const getCaseSheet = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { patientId } = req.params;
+
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: {
+        id: true,
+        fullName: true,
+        age: true,
+        gender: true,
+        phone: true,
+        doctorId: true,
+        createdAt: true,
+        history: true,
+        consultations: {
+          orderBy: { startedAt: 'asc' },
+          select: {
+            id: true,
+            startedAt: true,
+            completedAt: true,
+            status: true,
+            chiefComplaint: true,
+            doctorNotes: true,
+            prescription: {
+              select: {
+                id: true,
+                diagnosis: true,
+                medications: true,
+                instructions: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!patient) {
+      res.status(404).json({ success: false, message: 'Patient not found' });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      res.status(403).json({ success: false, message: 'Access denied: This patient does not belong to you' });
+      return;
+    }
+
+    // Parse medications JSON string in prescriptions
+    const visits = patient.consultations.map((c) => ({
+      id: c.id,
+      startedAt: c.startedAt,
+      completedAt: c.completedAt,
+      status: c.status,
+      chiefComplaint: c.chiefComplaint,
+      doctorNotes: c.doctorNotes,
+      prescription: c.prescription
+        ? {
+            id: c.prescription.id,
+            diagnosis: c.prescription.diagnosis,
+            medications:
+              typeof c.prescription.medications === 'string'
+                ? JSON.parse(c.prescription.medications)
+                : c.prescription.medications,
+            instructions: c.prescription.instructions,
+          }
+        : null,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        patient: {
+          id: patient.id,
+          fullName: patient.fullName,
+          age: patient.age,
+          gender: patient.gender,
+          phone: patient.phone,
+          createdAt: patient.createdAt,
+        },
+        history: patient.history,
+        visits,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get case sheet error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching case sheet', error: error.message });
+  }
+};
+
+// Update patient history (upsert)
+export const updateCaseSheet = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const doctorId = (req as any).user.id;
+    const { patientId } = req.params;
+
+    // Verify patient belongs to this doctor
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { doctorId: true },
+    });
+
+    if (!patient) {
+      res.status(404).json({ success: false, message: 'Patient not found' });
+      return;
+    }
+
+    if (patient.doctorId !== doctorId) {
+      res.status(403).json({ success: false, message: 'Access denied: This patient does not belong to you' });
+      return;
+    }
+
+    const {
+      bloodGroup,
+      allergies,
+      chronicConditions,
+      pastSurgeries,
+      familyHistory,
+      currentMedications,
+      smoking,
+      alcohol,
+      occupation,
+    } = req.body;
+
+    const historyData = {
+      bloodGroup: bloodGroup ?? undefined,
+      allergies: allergies ?? undefined,
+      chronicConditions: chronicConditions ?? undefined,
+      pastSurgeries: pastSurgeries ?? undefined,
+      familyHistory: familyHistory ?? undefined,
+      currentMedications: currentMedications ?? undefined,
+      smoking: smoking ?? undefined,
+      alcohol: alcohol ?? undefined,
+      occupation: occupation ?? undefined,
+    };
+
+    const history = await prisma.patientHistory.upsert({
+      where: { patientId },
+      create: { patientId, ...historyData },
+      update: historyData,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Patient history updated successfully',
+      data: { history },
+    });
+  } catch (error: any) {
+    console.error('Update case sheet error:', error);
+    res.status(500).json({ success: false, message: 'Error updating patient history', error: error.message });
+  }
+};
