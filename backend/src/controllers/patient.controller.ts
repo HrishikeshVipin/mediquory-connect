@@ -43,14 +43,6 @@ export const createPatient = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    if (doctor.status !== 'VERIFIED') {
-      res.status(403).json({
-        success: false,
-        message: 'Your account must be verified to create patients',
-      });
-      return;
-    }
-
     // Check subscription validity
     const now = new Date();
     if (doctor.subscriptionStatus === 'TRIAL') {
@@ -483,15 +475,6 @@ export const selfRegisterPatient = async (req: Request, res: Response): Promise<
       res.status(403).json({
         success: false,
         message: 'This doctor has disabled patient self-registration. Please contact them directly.',
-      });
-      return;
-    }
-
-    // Check if doctor is verified
-    if (doctor.status !== 'VERIFIED') {
-      res.status(403).json({
-        success: false,
-        message: 'This doctor account is not yet verified. Please try again later.',
       });
       return;
     }

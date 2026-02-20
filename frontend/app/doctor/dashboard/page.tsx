@@ -393,8 +393,7 @@ export default function DoctorDashboard() {
             </div>
 
             {/* Unread Chats Card */}
-            {doctor.status === 'VERIFIED' && (
-              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-5 transition-all duration-300 hover:scale-105 hover:-translate-y-1">
+            <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-5 transition-all duration-300 hover:scale-105 hover:-translate-y-1">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-blue-900">
                     💬 Unread Chats {totalUnread > 0 && (
@@ -460,11 +459,9 @@ export default function DoctorDashboard() {
                   </div>
                 )}
               </div>
-            )}
 
             {/* Quick Actions */}
-            {doctor.status === 'VERIFIED' && (
-              <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-5 transition-all duration-300 hover:scale-105 hover:-translate-y-1">
+            <div className="bg-white/70 backdrop-blur-xl border border-cyan-200/50 rounded-3xl shadow-lg shadow-cyan-500/10 p-5 transition-all duration-300 hover:scale-105 hover:-translate-y-1">
                 <h3 className="text-lg font-bold text-blue-900 mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <Link
@@ -522,7 +519,6 @@ export default function DoctorDashboard() {
                   </Link>
                 </div>
               </div>
-            )}
           </div>
 
           {/* Right Column - Profile Info */}
@@ -557,14 +553,7 @@ export default function DoctorDashboard() {
           </div>
         </div>
 
-        {/* Pending/Rejected Messages */}
-        {doctor.status === 'PENDING_VERIFICATION' && (
-          <div className="mt-6 bg-blue-50/70 backdrop-blur-xl border border-blue-200/50 rounded-2xl shadow-lg p-5">
-            <h3 className="text-sm font-bold text-blue-900 mb-2">Verification in Progress</h3>
-            <p className="text-sm text-gray-700">Your application is under review. You'll be notified via email once verified (typically 1-2 business days).</p>
-          </div>
-        )}
-
+        {/* Rejected Message */}
         {doctor.status === 'REJECTED' && doctor.rejectionReason && (
           <div className="mt-6 bg-red-50/70 backdrop-blur-xl border border-red-200/50 rounded-2xl shadow-lg p-5">
             <h3 className="text-sm font-bold text-red-900 mb-2">Application Rejected</h3>

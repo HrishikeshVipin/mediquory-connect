@@ -110,27 +110,6 @@ export const isDoctor = async (
     return;
   }
 
-  // Check if doctor is verified
-  const doctor = await prisma.doctor.findUnique({
-    where: { id: req.user.id },
-    select: { status: true },
-  });
-
-  if (!doctor) {
-    res.status(404).json({
-      success: false,
-      message: 'Doctor not found',
-    });
-    return;
-  }
-
-  if (doctor.status !== 'VERIFIED') {
-    res.status(403).json({
-      success: false,
-      message: `Access denied. Your account status: ${doctor.status}`,
-    });
-    return;
-  }
 
   // Add doctorId to request for easy access in controllers
   (req as any).doctorId = req.user.id;
