@@ -36,18 +36,22 @@ export const registrationLimiter = rateLimit({
 // General API rate limiter (for all API endpoints)
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 minutes per IP
+  max: 500, // 500 requests per 15 minutes per IP
   message: 'Too many API requests. Please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
-  // Skip rate limiting for all authenticated users (admins, doctors, patients)
+  // Skip rate limiting for authenticated users and patient consultation routes
   skip: (req: Request): boolean => {
-    if (!req.user || !req.user.role) {
-      return false;
+    // Skip for authenticated users
+    if (req.user?.role && ['ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'PATIENT'].includes(req.user.role)) {
+      return true;
     }
-    const allowedRoles = ['ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'PATIENT'];
-    return allowedRoles.includes(req.user.role);
+    // Skip for patient token-based consultation access (unauthenticated patients)
+    if (req.path.startsWith('/consultations/token/') || req.path.startsWith('/patient/')) {
+      return true;
+    }
+    return false;
   },
 });
 
