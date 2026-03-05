@@ -204,16 +204,24 @@ export default function DoctorConsultationPage() {
       }
     }, 2000);
 
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to chat server');
-
-      // Join consultation room
+    const emitJoinConsultation = () => {
       newSocket.emit('join-consultation', {
         consultationId: consultation!.id,
         userType: 'doctor',
         userName: user!.fullName,
       });
+    };
+
+    newSocket.on('connect', () => {
+      console.log('✅ Connected to chat server');
+      emitJoinConsultation();
     });
+
+    // If already connected (singleton socket reused from NotificationContext), emit immediately
+    if (newSocket.connected) {
+      console.log('✅ Socket already connected, joining consultation directly');
+      emitJoinConsultation();
+    }
 
     newSocket.on('joined-consultation', () => {
       console.log('✅ Joined consultation room');

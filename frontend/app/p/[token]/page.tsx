@@ -168,16 +168,24 @@ export default function PatientAccessPage() {
     const newSocket = connectSocket();
     setSocket(newSocket);
 
-    newSocket.on('connect', () => {
-      console.log('Connected to chat server');
-
-      // Join consultation room
+    const emitJoinConsultation = () => {
       newSocket.emit('join-consultation', {
         consultationId: consultation!.id,
         userType: 'patient',
         userName: 'Patient',
       });
+    };
+
+    newSocket.on('connect', () => {
+      console.log('Connected to chat server');
+      emitJoinConsultation();
     });
+
+    // If already connected (singleton socket), emit immediately
+    if (newSocket.connected) {
+      console.log('Socket already connected, joining consultation directly');
+      emitJoinConsultation();
+    }
 
     newSocket.on('joined-consultation', () => {
       console.log('Joined consultation room');
